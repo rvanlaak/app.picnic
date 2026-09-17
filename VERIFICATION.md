@@ -64,9 +64,19 @@ already reads and from what the unofficial API is documented to return, and
 every one of them is read defensively: a field that is missing, null or of the
 wrong type leaves that part of the widget empty instead of throwing.
 
-- [ ] **`slot.cut_off_time`** in `/api/15/deliveries/summary`. The whole "you
-  can still add until 14:00" line rests on this field existing under that name
-  and being a timestamp. If it is not there, the line silently never appears.
+- [ ] **`slot.cut_off_time`** in `/api/15/deliveries/summary`. Taken when it is
+  there, which is why it is still worth confirming, but nothing rests on it any
+  more: when Picnic does not hand one over the app works the deadline out
+  itself. Worth comparing the two when a real response is in front of you — if
+  they disagree, Picnic is right and `lib/cutoff.js` is wrong.
+- [ ] **The 13:00 / 23:00 rule.** `lib/cutoff.js` derives the deadline as 13:00
+  the day before a delivery whose window starts before 13:00, and 23:00 the day
+  before one that starts later. That is what a Dutch account sees today,
+  reported rather than read off Picnic. Confirm it holds for the German store
+  as well, and that it does not vary by hub or by kind of slot. A rule that is
+  wrong here shows a deadline that is off by hours, which is worse than showing
+  none: if it turns out to vary, fall back to only showing a deadline Picnic
+  itself gave.
 - [ ] **`/api/15/cart` totals.** `total_price` in cents and `total_count` as a
   number of products. Confirm both names and the unit.
 - [ ] **Minimum order value.** Read from `minimum_order_value` on the cart, on
@@ -84,7 +94,8 @@ wrong type leaves that part of the widget empty instead of throwing.
 - [ ] **`https://picnic.app`.** Where tapping the widget goes. A deep link into
   the store or the cart would be better, and the right host may differ per
   country (the app already knows whether the account is `nl` or `de`).
-- [ ] **Adding to an open order.** The widget only shows the cart when nothing
-  is ordered, on the assumption that items added to an open order do not sit in
-  the cart in a way worth showing. If Picnic does keep them in the cart until
-  the cut off, showing the cart during an open order is worth adding.
+- [ ] **What a cart alongside an open order means.** It is taken to mean those
+  items still have to be added to that order, so the widget puts the amount and
+  the deadline under the countdown. Confirm there is no other way for products
+  to end up in the cart while an order is open — one that would have the widget
+  urging someone to finish something they did not start.

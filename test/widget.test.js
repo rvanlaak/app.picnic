@@ -28,6 +28,8 @@ const LABELS = {
   'minimum': '__t__ to the minimum',
   'cut-off-at': 'Add until __t__',
   'cut-off-in': '__n__ min left to add',
+  'to-order-at': '__a__ not ordered yet, until __t__',
+  'to-order-in': '__a__ not ordered yet, __n__ min left',
   'day': 'in __n__ day',
   'days': 'in __n__ days',
   'hour': 'in __n__ hour',
@@ -390,4 +392,66 @@ test('no countdown on the widget is ever finer than a minute', () => {
   // the only divisions by a thousand would be seconds; minutes, hours and days
   // are divided by 60000 and up
   assert.strictEqual(seconds, null);
+});
+
+test('a cart while an order is open is what still has to go onto that order', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(state({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-07-28T16:00:00.000+02:00',
+    etaEnd: '2026-07-28T17:00:00.000+02:00',
+    cutOffAt: '2026-07-27T23:00:00.000+02:00',
+    now: '2026-07-27T19:00:00.000+02:00'
+  }, { cart: { totalPrice: 12.4, productCount: 3, minimumOrderValue: 35 }, cutOffTime: '23:00' }));
+
+  // the delivery is still the headline, the things not on it yet the footnote
+  assert.strictEqual(nodes.headline.textContent, 'in 21 hours');
+  assert.strictEqual(nodes.footnote.textContent, '€12.40 not ordered yet, until 23:00');
+  assert.strictEqual(nodes.footnote.dataset.urgent, 'true');
+});
+
+test('the last hour to add to an open order counts down next to the amount', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(state({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-07-28T16:00:00.000+02:00',
+    etaEnd: '2026-07-28T17:00:00.000+02:00',
+    cutOffAt: '2026-07-27T23:00:00.000+02:00',
+    now: '2026-07-27T22:35:00.000+02:00'
+  }, { cart: { totalPrice: 12.4, productCount: 3, minimumOrderValue: 35 }, cutOffTime: '23:00' }));
+
+  assert.strictEqual(nodes.footnote.textContent, '€12.40 not ordered yet, 25 min left');
+});
+
+test('an empty cart while an order is open leaves the deadline to speak for itself', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(state({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-07-28T16:00:00.000+02:00',
+    etaEnd: '2026-07-28T17:00:00.000+02:00',
+    cutOffAt: '2026-07-27T23:00:00.000+02:00',
+    now: '2026-07-27T19:00:00.000+02:00'
+  }, { cart: { totalPrice: 0, productCount: 0, minimumOrderValue: 35 }, cutOffTime: '23:00' }));
+
+  assert.strictEqual(nodes.footnote.textContent, 'Add until 23:00');
+  assert.strictEqual(nodes.footnote.dataset.urgent, 'false');
+});
+
+test('a cart that can no longer be added to an order is not held over the reader', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(state({
+    orderStatus: 'delivery_announced',
+    etaStart: '2026-07-28T16:11:00.000+02:00',
+    etaEnd: '2026-07-28T16:31:00.000+02:00',
+    announcedAt: '2026-07-28T15:41:00.000+02:00',
+    cutOffAt: '2026-07-27T23:00:00.000+02:00',
+    now: '2026-07-28T15:56:00.000+02:00'
+  }, { cart: { totalPrice: 12.4, productCount: 3, minimumOrderValue: 35 } }));
+
+  assert.strictEqual(nodes.headline.textContent, 'in 15 min');
+  assert.strictEqual(nodes.footnote.hidden, true);
 });

@@ -56,7 +56,9 @@
             "items": "__n__ producten",
             "minimum": "__t__ tot het minimum",
             "cut-off-at": "Bijbestellen kan tot __t__",
-            "cut-off-in": "Bijbestellen: nog __n__ min"
+            "cut-off-in": "Bijbestellen: nog __n__ min",
+            "to-order-at": "__a__ nog niet besteld, tot __t__",
+            "to-order-in": "__a__ nog niet besteld, nog __n__ min"
         }
     }
 }

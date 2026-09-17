@@ -40,11 +40,15 @@ the wall is good at telling you: when the groceries turn up.
   running late, and afterwards the time they were delivered
 - The amount of the order is shown alongside it, which can be turned off in the
   widget's settings
-- While an order can still be changed, the widget says until when. In the last
-  hour before it closes that becomes a countdown in minutes
-- With nothing ordered, the widget shows what is in your cart and how many
-  products that is, and how much is missing when that is below the minimum
-  order value
+- While an order can still be added to, the widget says until when. In the last
+  hour before it closes that becomes a countdown in minutes. Picnic closes an
+  order at 13:00 the day before a morning delivery and at 23:00 the day before
+  a later one, which the app works out for itself when Picnic does not say
+- Anything in your cart while an order is open still has to be added to that
+  order, so the widget says how much that is and how long is left to do it
+- With nothing ordered at all, the widget shows what is in your cart and how
+  many products that is, and how much is missing when that is below the
+  minimum order value
 - Tapping the widget opens Picnic, which can be turned off in the widget's
   settings
 

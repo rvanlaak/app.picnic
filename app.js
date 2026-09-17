@@ -7,6 +7,7 @@ const utils = require('./lib/utils.js');
 const { deriveOrderEvent, windowTriggersStillApply, deriveOrderFacts } = require('./lib/orderevent.js');
 const { deriveDeliveryState } = require('./lib/deliverystate.js');
 const { parseCart } = require('./lib/cartresponse.js');
+const cutoff = require('./lib/cutoff.js');
 const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
 const twofactor = require('./lib/twofactor.js');
 const { describeError, describeStack, describeBody, toError } = require('./lib/errors.js');
@@ -381,6 +382,13 @@ class Picnic extends Homey.App {
 		return eta.formatEtaDate(iso, this.homey.clock.getTimezone());
 	}
 
+	// The deadline for adding to an order being delivered in this window. A
+	// deadline of "the day before" is a day on a calendar in Homey's timezone
+	// rather than a number of hours, so the timezone goes with it.
+	cutOffFor(windowStart) {
+		return cutoff.deriveCutOff(windowStart, this.homey.clock.getTimezone());
+	}
+
 	// the token set every delivery window trigger hands to its flow
 	_etaTokens(eta_start, eta_end) {
 		return {
@@ -403,14 +411,20 @@ class Picnic extends Homey.App {
 			"etaEnd": this.homey.settings.get("delivery_eta_end"),
 			"announcedAt": this.homey.settings.get("delivery_announced_at"),
 			"deliveredAt": this.homey.settings.get("delivery_time"),
-			"cutOffAt": this.homey.settings.get("delivery_cut_off"),
+			// what Picnic said, and otherwise what its own rule works out to: an
+			// order can be added to until 13:00 the day before a delivery that
+			// starts in the morning, and until 23:00 the day before one later
+			"cutOffAt": this.homey.settings.get("delivery_cut_off")
+				|| this.cutOffFor(this.homey.settings.get("delivery_eta_start")),
 			"signInNeeded": this._picnicOutOfReach(),
 			"now": now.toISOString()
 		});
 
-		// nothing planned is when the cart is worth a look, and the only time
-		// the widget shows it, so that is the only time Picnic is asked for it
-		if (state["state"] == "idle") this._refreshCartWhenStale();
+		// The cart is worth a look when there is nothing planned, and while an
+		// order is still open, because what is in it then are the things that
+		// have yet to be added to that order. Once it closes there is nothing
+		// to be done about them and Picnic is left alone about it.
+		if (state["state"] == "idle" || state["cutOffAt"]) this._refreshCartWhenStale();
 
 		return Object.assign(state, {
 			"now": now.toISOString(),
@@ -473,7 +487,8 @@ class Picnic extends Homey.App {
 
 		["signed-out", "idle", "ordered", "announced", "arriving", "overdue", "delivered",
 			"now", "day", "days", "hour", "hours", "minute", "minutes",
-			"cart", "item", "items", "minimum", "cut-off-at", "cut-off-in"].forEach(key => {
+			"cart", "item", "items", "minimum", "cut-off-at", "cut-off-in",
+			"to-order-at", "to-order-in"].forEach(key => {
 				labels[key] = this.homey.__("widget.delivery." + key);
 			});
 

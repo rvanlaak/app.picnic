@@ -260,12 +260,17 @@
       return (state && state['labels'] && state['labels'][key]) || '';
     }
 
-    function count(key, value) {
-      return label(key).replace('__n__', String(value));
-    }
+    // The labels arrive as sentences with __n__, __t__ and __a__ in them,
+    // because the number, the time or the amount to put in is only known here:
+    // the app is not asked anything while the minutes tick away.
+    function text(key, values) {
+      var filled = label(key);
 
-    function substitute(key, value) {
-      return label(key).replace('__t__', value);
+      for (var name in values) {
+        filled = filled.replace('__' + name + '__', String(values[name]));
+      }
+
+      return filled;
     }
 
     function money(amount) {
@@ -285,13 +290,13 @@
       if (isNaN(left) || left <= 0) return label('now');
 
       var minutes = Math.ceil(left / 60000);
-      if (minutes < 60) return count(minutes == 1 ? 'minute' : 'minutes', minutes);
+      if (minutes < 60) return text(minutes == 1 ? 'minute' : 'minutes', { n: minutes });
 
       var hours = Math.round(left / 3600000);
-      if (hours < 24) return count(hours == 1 ? 'hour' : 'hours', hours);
+      if (hours < 24) return text(hours == 1 ? 'hour' : 'hours', { n: hours });
 
       var days = Math.round(left / 86400000);
-      return count(days == 1 ? 'day' : 'days', days);
+      return text(days == 1 ? 'day' : 'days', { n: days });
     }
 
     function windowText(data) {
@@ -312,16 +317,40 @@
     // order open until the slot's cut off moment. Hours away that is a time to
     // remember, minutes away it is something to hurry for, and once it has
     // passed there is nothing left to say about it.
-    function cutOff(data) {
+    function minutesToCutOff(data) {
       if (!data['cutOffAt']) return null;
 
       var left = Date.parse(data['cutOffAt']) - now();
       if (isNaN(left) || left <= 0) return null;
 
-      var minutes = Math.ceil(left / 60000);
-      if (minutes <= CUT_OFF_URGENT_MINUTES) return { text: count('cut-off-in', minutes), urgent: true };
+      return Math.ceil(left / 60000);
+    }
 
-      return { text: substitute('cut-off-at', data['cutOffTime']), urgent: false };
+    function cutOff(data) {
+      var minutes = minutesToCutOff(data);
+      if (minutes === null) return null;
+
+      if (minutes <= CUT_OFF_URGENT_MINUTES) return { text: text('cut-off-in', { n: minutes }), urgent: true };
+
+      return { text: text('cut-off-at', { t: data['cutOffTime'] }), urgent: false };
+    }
+
+    // Something in the cart while an order is open is something that still has
+    // to be put on that order, and can only be until the order closes. That is
+    // a thing left undone with a deadline on it, so it says so in place of the
+    // deadline on its own.
+    function stillToOrder(data, cart) {
+      if (cart === null) return null;
+
+      var minutes = minutesToCutOff(data);
+      if (minutes === null) return null;
+
+      return {
+        text: minutes <= CUT_OFF_URGENT_MINUTES
+          ? text('to-order-in', { a: cart.headline, n: minutes })
+          : text('to-order-at', { a: cart.headline, t: data['cutOffTime'] }),
+        urgent: true
+      };
     }
 
     // With no delivery to report, the cart is what the widget has to say. An
@@ -341,8 +370,8 @@
       return {
         chip: label('cart'),
         headline: money(total),
-        detail: typeof products == 'number' && products > 0 ? count(products == 1 ? 'item' : 'items', products) : '',
-        footnote: short === null ? null : { text: substitute('minimum', money(short)), urgent: true }
+        detail: typeof products == 'number' && products > 0 ? text(products == 1 ? 'item' : 'items', { n: products }) : '',
+        footnote: short === null ? null : { text: text('minimum', { t: money(short) }), urgent: true }
       };
     }
 
@@ -375,9 +404,11 @@
 
     // Everything on screen, worked out before any of it is put there.
     function view() {
-      var cart = state['state'] == 'idle' ? cartLines(state) : null;
+      var cart = cartLines(state);
 
-      if (cart !== null) {
+      // with nothing planned the cart is all the widget has to say; with a
+      // delivery on the way it is a footnote to it and never the headline
+      if (cart !== null && state['state'] == 'idle') {
         return {
           accent: STATES['ordered'].accent,
           chip: cart.chip,
@@ -404,7 +435,7 @@
         detail: text.detail,
         price: price(state),
         progress: state['progress'],
-        footnote: cutOff(state)
+        footnote: stillToOrder(state, cart) || cutOff(state)
       };
     }
 

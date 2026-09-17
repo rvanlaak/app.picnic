@@ -56,7 +56,9 @@
             "items": "__n__ products",
             "minimum": "__t__ to the minimum",
             "cut-off-at": "Add until __t__",
-            "cut-off-in": "__n__ min left to add"
+            "cut-off-in": "__n__ min left to add",
+            "to-order-at": "__a__ not ordered yet, until __t__",
+            "to-order-in": "__a__ not ordered yet, __n__ min left"
         }
     }
 }
