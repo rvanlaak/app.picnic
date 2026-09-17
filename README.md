@@ -74,6 +74,54 @@ The following order specific global tokens are available:
 - Start of the delivery window
 - End of the delivery window
 
+## Developing
+
+Install the Homey CLI once, and log in to the Homey you want to develop
+against:
+
+```
+npm install -g homey
+homey login
+```
+
+Then, from a clone of this repository:
+
+| | |
+| --- | --- |
+| `npm start` | Runs the app on your Homey, the way the CLI does. Stopping the CLI stops the app |
+| `npm run start:clean` | The same, but deletes the app's stored data first. See the warning below |
+| `npm run install:homey` | Installs the app on your Homey so it stays there after the CLI is closed |
+| `npm test` | The unit tests, which need nothing but Node |
+| `npm run validate` | Validates the app the way the App Store does, without the CLI and without a Homey |
+| `npm run validate:cli` | The same check through the Homey CLI |
+| `npm run compose` | Regenerates `app.json` out of `.homeycompose` and `widgets/*/widget.compose.json` |
+
+Everything that hands the app to the CLI installs the app's dependencies first
+if they are not there. Without them the CLI stops before it starts, with an
+error about `npm ls` rather than about what is missing:
+
+```
+✖ Command failed: npm ls --parseable --all --only=prod
+npm error missing: md5@^2.2.1, required by app.picnic@3.7.0
+```
+
+That is a fresh clone with no `node_modules`, and `npm install` is the whole
+fix. `npm start` does it for you.
+
+**`--clean` costs you your login.** It deletes the app's stored data, and this
+app keeps your Picnic credentials, its session and the order it is following
+there. After it you have to sign in again on the app's settings page, and
+Picnic sends a new SMS code to do it. Use plain `npm start` unless starting
+from nothing is the point.
+
+`homey app run` regenerates `app.json` itself before it starts, so if `git
+status` shows `app.json` changed after a run, the committed one was out of date
+and the new one should be committed with your change.
+
+While `npm start` is running, the files under `widgets/delivery/public/` are
+served straight from this folder. Editing the widget and reloading it on the
+dashboard shows the change without restarting the app.
+
 ## Changelog
 
 Every release and what changed in it is in [CHANGELOG.md](CHANGELOG.md).
