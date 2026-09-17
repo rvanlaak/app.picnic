@@ -86,41 +86,50 @@ homey login
 
 Then, from a clone of this repository:
 
+```
+make run
+```
+
+That is the whole thing. It installs the app's dependencies if they are not
+there and starts the app on your Homey, which runs until you stop it. `make` on
+its own lists the rest:
+
 | | |
 | --- | --- |
-| `npm start` | Runs the app on your Homey, the way the CLI does. Stopping the CLI stops the app |
-| `npm run start:clean` | The same, but deletes the app's stored data first. See the warning below |
-| `npm run install:homey` | Installs the app on your Homey so it stays there after the CLI is closed |
-| `npm test` | The unit tests, which need nothing but Node |
-| `npm run validate` | Validates the app the way the App Store does, without the CLI and without a Homey |
-| `npm run validate:cli` | The same check through the Homey CLI |
-| `npm run compose` | Regenerates `app.json` out of `.homeycompose` and `widgets/*/widget.compose.json` |
+| `make run` | Run the app on your Homey, until you stop it |
+| `make run-clean` | Run it after deleting the stored data. See the warning below |
+| `make install` | Install the app on your Homey, where it stays after the CLI is closed |
+| `make test` | The unit tests, which need nothing but Node and no dependencies at all |
+| `make validate` | Validates the app the way the App Store does, without the CLI and without a Homey |
 
-Everything that hands the app to the CLI installs the app's dependencies first
-if they are not there. Without them the CLI stops before it starts, with an
-error about `npm ls` rather than about what is missing:
+All of it is there as npm scripts too: `npm start`, `npm run start:clean`,
+`npm run install:homey`, `npm test` and `npm run validate` do the same things,
+and `npm run compose` and `npm run validate:cli` are only there.
+
+**`--clean` costs you your login.** It deletes the app's stored data, and this
+app keeps your Picnic credentials, its session and the order it is following
+there. After it you have to sign in again on the app's settings page, and
+Picnic sends a new SMS code to do it. Use plain `make run` unless starting from
+nothing is the point.
+
+Neither `make` nor `npm` will let you get as far as the error a fresh clone
+used to start with, which is the Homey CLI finding no dependencies to build
+with and saying so in terms of npm:
 
 ```
 ✖ Command failed: npm ls --parseable --all --only=prod
 npm error missing: md5@^2.2.1, required by app.picnic@3.7.0
 ```
 
-That is a fresh clone with no `node_modules`, and `npm install` is the whole
-fix. `npm start` does it for you.
-
-**`--clean` costs you your login.** It deletes the app's stored data, and this
-app keeps your Picnic credentials, its session and the order it is following
-there. After it you have to sign in again on the app's settings page, and
-Picnic sends a new SMS code to do it. Use plain `npm start` unless starting
-from nothing is the point.
+If you do meet it, `npm install` is the whole fix.
 
 `homey app run` regenerates `app.json` itself before it starts, so if `git
 status` shows `app.json` changed after a run, the committed one was out of date
 and the new one should be committed with your change.
 
-While `npm start` is running, the files under `widgets/delivery/public/` are
-served straight from this folder. Editing the widget and reloading it on the
-dashboard shows the change without restarting the app.
+While the app is running, the files under `widgets/delivery/public/` are served
+straight from this folder. Editing the widget and reloading it on the dashboard
+shows the change without restarting the app.
 
 ## Changelog
 
