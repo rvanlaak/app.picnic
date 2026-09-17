@@ -8,6 +8,10 @@ each release is what Homey shows in the app store, and lives in `.homeychangelog
 - A "Delivery" widget for Homey Dashboards. An order that has been placed shows the day and the slot it will be delivered in and counts down towards it; once Picnic announces the delivery moment the countdown is to that window, with a bar that fills as the delivery draws near. During the window it says the groceries are arriving, after it that Picnic is running late, and once they have been delivered it says at what time, for the six hours after
 - The widget follows the app rather than the other way around: it is told about a new state as the poll finds it, counts the minutes down by itself in between, and counts them down on Homey's clock rather than on the clock of whatever is showing the dashboard
 - The app now writes down when a delivery was announced and when it arrived. Neither was kept, and both are what the widget needs to say how far along a delivery is and whether the groceries came today
+- The widget says until when an order can still be added to, and turns that into a countdown in minutes over the last hour before it closes. It is the one thing on a grocery dashboard that can still be acted on
+- With nothing ordered, the widget shows what is in the cart and how many products that is, so it has something to say on the days between deliveries. If the cart is below the minimum order value it says how much is missing
+- Tapping the widget opens Picnic, with a short buzz to say the tap arrived. Both the cart and the tap can be turned off in the widget's settings
+- The cart is only fetched while a dashboard is actually showing the widget, at most once every five minutes, and only while nothing is ordered
 - The app needs Homey firmware v12.1.0 or newer from this release on. That is what an app containing a widget is required to ask for, and it is the version Homey Dashboards themselves need
 
 ## 3.7.0

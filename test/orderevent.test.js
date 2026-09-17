@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { deriveOrderEvent, windowTriggersStillApply } = require('../lib/orderevent.js');
+const { deriveOrderEvent, windowTriggersStillApply, deriveOrderFacts } = require('../lib/orderevent.js');
 
 const SLOT = {
   window_start: "2026-07-28T16:00:00.000+02:00",
@@ -163,4 +163,22 @@ test('an unreadable delivery moment leaves the window triggers alone', () => {
 test('a delivery moment defaults to now, so a passed window keeps its triggers', () => {
   assert.strictEqual(windowTriggersStillApply(SLOT.window_start), true);
   assert.strictEqual(windowTriggersStillApply(new Date(Date.now() + 60000).toISOString()), false);
+});
+
+test('the cut off of the slot is read off every poll, not off an event', () => {
+  const facts = deriveOrderFacts(summary({ slot: Object.assign({ cut_off_time: "2026-07-28T14:00:00.000+02:00" }, SLOT) }));
+
+  assert.strictEqual(facts.cutOffTime, "2026-07-28T14:00:00.000+02:00");
+});
+
+test('a slot without a cut off, or no slot, or no delivery, reports nothing rather than guessing', () => {
+  assert.strictEqual(deriveOrderFacts(summary()).cutOffTime, null);
+  assert.strictEqual(deriveOrderFacts([{}]).cutOffTime, null);
+  assert.strictEqual(deriveOrderFacts([]).cutOffTime, null);
+  assert.strictEqual(deriveOrderFacts(null).cutOffTime, null);
+});
+
+test('a cut off that is not a timestamp is not passed on as one', () => {
+  assert.strictEqual(deriveOrderFacts([{ slot: { cut_off_time: 1769000000 } }]).cutOffTime, null);
+  assert.strictEqual(deriveOrderFacts([{ slot: { cut_off_time: "" } }]).cutOffTime, null);
 });

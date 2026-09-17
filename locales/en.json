@@ -50,7 +50,13 @@
             "minute": "in __n__ min",
             "minutes": "in __n__ min",
             "today": "today",
-            "tomorrow": "tomorrow"
+            "tomorrow": "tomorrow",
+            "cart": "In your cart",
+            "item": "__n__ product",
+            "items": "__n__ products",
+            "minimum": "__t__ to the minimum",
+            "cut-off-at": "Add until __t__",
+            "cut-off-in": "__n__ min left to add"
         }
     }
 }

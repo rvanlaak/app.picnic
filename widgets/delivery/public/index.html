@@ -25,8 +25,13 @@
       justify-content: center;
       gap: var(--homey-su-1, 4px);
 
-      /* the state decides the one colour on the widget, see setState() */
+      /* the state decides the one colour on the widget, see view() */
       --accent: #e40613;
+      --warn: #f2a20c;
+    }
+
+    .delivery[data-tappable="true"] {
+      cursor: pointer;
     }
 
     .top {
@@ -106,6 +111,21 @@
       transition: width 0.4s ease-out;
     }
 
+    .footnote {
+      margin-top: var(--homey-su-2, 8px);
+      opacity: 0.6;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* the last minutes before the order closes are the one thing on here worth
+       hurrying for, so they are the one thing that is not grey */
+    .footnote[data-urgent="true"] {
+      color: var(--warn);
+      opacity: 1;
+    }
+
     [hidden] {
       display: none !important;
     }
@@ -126,6 +146,8 @@
     <div class="track" id="track" hidden>
       <div class="fill" id="fill"></div>
     </div>
+
+    <div class="footnote homey-text-small" id="footnote" hidden></div>
   </div>
 
   <script type="text/javascript">
@@ -134,9 +156,14 @@
     // way the widget finds out.
     var REFRESH_INTERVAL = 30 * 1000;
 
-    // How often the countdown is retold. The app is not involved: counting the
-    // minutes down is the one thing the widget can do on its own.
-    var TICK_INTERVAL = 10 * 1000;
+    // How often what is on screen is worked out again. Nothing here is ever
+    // counted down in seconds, so this only has to be often enough that the
+    // minute it shows is never noticeably behind the minute it is.
+    var TICK_INTERVAL = 20 * 1000;
+
+    // Below this, the cut off is close enough to hurry for and is counted down
+    // in minutes rather than named as a time.
+    var CUT_OFF_URGENT_MINUTES = 60;
 
     // What each state colours the widget, and whether its headline is a
     // countdown or something to read.
@@ -171,6 +198,9 @@
       // makes an announcement show up on the dashboard while you look at it
       Homey.on('delivery_state', adopt);
 
+      element('delivery').dataset.tappable = settings['open_on_tap'] === false ? 'false' : 'true';
+      element('delivery').addEventListener('click', tap);
+
       var shown = false;
       var show = function () {
         if (shown) return;
@@ -204,6 +234,23 @@
       render();
     }
 
+    // Tapping the widget opens Picnic, which is what someone who just read
+    // that the order closes in twenty minutes wants next.
+    function tap() {
+      if (settings['open_on_tap'] === false) return;
+      if (state === null || !state['popupUrl']) return;
+
+      try {
+        // only allowed in the moment right after a touch, and only on newer
+        // firmware, so a runtime without it must not take the tap with it
+        homey.hapticFeedback();
+      } catch (exception) {
+        console.error(exception);
+      }
+
+      Promise.resolve(homey.popup(state['popupUrl'])).catch(console.error);
+    }
+
     // The widget's idea of what time it is, which is Homey's.
     function now() {
       return Date.now() + clockOffset;
@@ -217,8 +264,22 @@
       return label(key).replace('__n__', String(value));
     }
 
+    function substitute(key, value) {
+      return label(key).replace('__t__', value);
+    }
+
+    function money(amount) {
+      try {
+        return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' }).format(amount);
+      } catch (exception) {
+        return '€ ' + amount.toFixed(2);
+      }
+    }
+
     // How long is left, in the largest unit that still says something useful.
-    // Minutes are rounded up so that a delivery does not arrive "in 0 min".
+    // Minutes are rounded up so that a delivery does not arrive "in 0 min",
+    // and are the smallest unit on here: a dashboard is read in passing, and
+    // seconds ticking away would be movement without information.
     function remaining(target) {
       var left = Date.parse(target) - now();
       if (isNaN(left) || left <= 0) return label('now');
@@ -244,11 +305,45 @@
       var amount = data['price'];
       if (typeof amount != 'number' || !isFinite(amount) || amount <= 0) return '';
 
-      try {
-        return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' }).format(amount);
-      } catch (exception) {
-        return '€ ' + amount.toFixed(2);
-      }
+      return money(amount);
+    }
+
+    // The one thing on the widget that can still be acted on: Picnic keeps an
+    // order open until the slot's cut off moment. Hours away that is a time to
+    // remember, minutes away it is something to hurry for, and once it has
+    // passed there is nothing left to say about it.
+    function cutOff(data) {
+      if (!data['cutOffAt']) return null;
+
+      var left = Date.parse(data['cutOffAt']) - now();
+      if (isNaN(left) || left <= 0) return null;
+
+      var minutes = Math.ceil(left / 60000);
+      if (minutes <= CUT_OFF_URGENT_MINUTES) return { text: count('cut-off-in', minutes), urgent: true };
+
+      return { text: substitute('cut-off-at', data['cutOffTime']), urgent: false };
+    }
+
+    // With no delivery to report, the cart is what the widget has to say. An
+    // empty one is not worth a tile, and a response this version cannot read
+    // leaves it as it was: saying nothing is planned, which is true.
+    function cartLines(data) {
+      var cart = data['cart'];
+      if (!cart) return null;
+
+      var total = cart['totalPrice'];
+      if (typeof total != 'number' || !isFinite(total) || total <= 0) return null;
+
+      var products = cart['productCount'];
+      var minimum = cart['minimumOrderValue'];
+      var short = typeof minimum == 'number' && isFinite(minimum) && total < minimum ? minimum - total : null;
+
+      return {
+        chip: label('cart'),
+        headline: money(total),
+        detail: typeof products == 'number' && products > 0 ? count(products == 1 ? 'item' : 'items', products) : '',
+        footnote: short === null ? null : { text: substitute('minimum', money(short)), urgent: true }
+      };
     }
 
     // What the headline says, and the line underneath it.
@@ -278,30 +373,67 @@
       return left + ' · ' + right;
     }
 
-    function render() {
-      if (state === null) return;
+    // Everything on screen, worked out before any of it is put there.
+    function view() {
+      var cart = state['state'] == 'idle' ? cartLines(state) : null;
+
+      if (cart !== null) {
+        return {
+          accent: STATES['ordered'].accent,
+          chip: cart.chip,
+          kind: 'countdown',
+          headline: cart.headline,
+          detail: cart.detail,
+          // the price of the last order says nothing about the cart in front
+          // of it, and two amounts next to each other would invite reading one
+          // as the other
+          price: '',
+          progress: null,
+          footnote: cart.footnote
+        };
+      }
 
       var appearance = STATES[state['state']] || STATES['idle'];
       var text = lines(state);
 
-      element('delivery').style.setProperty('--accent', appearance.accent);
+      return {
+        accent: appearance.accent,
+        chip: appearance.chip ? label(appearance.chip) : '',
+        kind: text.kind || appearance.kind,
+        headline: text.headline,
+        detail: text.detail,
+        price: price(state),
+        progress: state['progress'],
+        footnote: cutOff(state)
+      };
+    }
 
-      element('top').hidden = appearance.chip === null;
-      element('state').textContent = appearance.chip ? label(appearance.chip) : '';
+    function render() {
+      if (state === null) return;
 
-      var amount = price(state);
-      element('price').textContent = amount;
-      element('price').hidden = amount == '';
+      var showing = view();
 
-      element('headline').textContent = text.headline;
-      element('headline').dataset.kind = text.kind || appearance.kind;
+      element('delivery').style.setProperty('--accent', showing.accent);
 
-      element('detail').textContent = text.detail;
+      element('top').hidden = showing.chip == '';
+      element('state').textContent = showing.chip;
 
-      var progress = state['progress'];
+      element('price').textContent = showing.price;
+      element('price').hidden = showing.price == '';
+
+      element('headline').textContent = showing.headline;
+      element('headline').dataset.kind = showing.kind;
+
+      element('detail').textContent = showing.detail;
+
+      var progress = showing.progress;
       var known = typeof progress == 'number' && isFinite(progress);
       element('track').hidden = !known;
       element('fill').style.width = known ? Math.round(progress * 100) + '%' : '0%';
+
+      element('footnote').textContent = showing.footnote ? showing.footnote.text : '';
+      element('footnote').dataset.urgent = showing.footnote && showing.footnote.urgent ? 'true' : 'false';
+      element('footnote').hidden = !showing.footnote;
     }
   </script>
 </body>

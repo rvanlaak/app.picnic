@@ -3,7 +3,7 @@
     "en": "Delivery",
     "nl": "Bezorging"
   },
-  "height": 168,
+  "height": 188,
   "settings": [
     {
       "id": "show_price",
@@ -12,6 +12,15 @@
       "title": {
         "en": "Show what the order costs",
         "nl": "Toon het bedrag van de bestelling"
+      }
+    },
+    {
+      "id": "open_on_tap",
+      "type": "checkbox",
+      "value": true,
+      "title": {
+        "en": "Open Picnic when the widget is tapped",
+        "nl": "Open Picnic bij een tik op de widget"
       }
     }
   ],

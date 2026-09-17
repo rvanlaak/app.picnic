@@ -50,7 +50,13 @@
             "minute": "over __n__ min",
             "minutes": "over __n__ min",
             "today": "vandaag",
-            "tomorrow": "morgen"
+            "tomorrow": "morgen",
+            "cart": "In je mandje",
+            "item": "__n__ product",
+            "items": "__n__ producten",
+            "minimum": "__t__ tot het minimum",
+            "cut-off-at": "Bijbestellen kan tot __t__",
+            "cut-off-in": "Bijbestellen: nog __n__ min"
         }
     }
 }

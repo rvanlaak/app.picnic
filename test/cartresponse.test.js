@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { parseAddProductResponse } = require('../lib/cartresponse.js');
+const { parseAddProductResponse, parseCart } = require('../lib/cartresponse.js');
 
 const PRODUCT = "s1004234";
 
@@ -101,4 +101,53 @@ test('does not throw on a body that is not a string', () => {
   [undefined, null, 0, {}, []].forEach(body => {
     assert.ok(parseAddProductResponse(body, PRODUCT)["error"]);
   });
+});
+
+test('a cart reports what it is worth and how much is in it', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 4320, total_count: 12, minimum_order_value: 3500 }));
+
+  assert.deepStrictEqual(cart, { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35 });
+});
+
+test('a cart that does not total itself up is counted line by line', () => {
+  const cart = parseCart(JSON.stringify({
+    total_price: 1000,
+    items: [{ items: [{ id: "a", count: 2 }, { id: "b" }] }, { items: [{ id: "c", count: 3 }] }]
+  }));
+
+  assert.strictEqual(cart.productCount, 6);
+});
+
+test('an empty cart is empty rather than unknown', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 0, items: [] }));
+
+  assert.strictEqual(cart.productCount, 0);
+  assert.strictEqual(cart.totalPrice, 0);
+});
+
+test('the minimum order value is looked for on the slot as well as on the cart', () => {
+  const cart = parseCart(JSON.stringify({
+    total_price: 1000,
+    selected_slot: { slot_id: "s2" },
+    delivery_slots: [{ slot_id: "s1", minimum_order_value: 1000 }, { slot_id: "s2", minimum_order_value: 3500 }]
+  }));
+
+  assert.strictEqual(cart.minimumOrderValue, 35);
+});
+
+test('a minimum order value Picnic does not mention is not invented', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 1000 }));
+
+  assert.strictEqual(cart.minimumOrderValue, null);
+});
+
+test('amounts that are not numbers leave the widget with nothing to show', () => {
+  const cart = parseCart(JSON.stringify({ total_price: "43.20" }));
+
+  assert.strictEqual(cart.totalPrice, null);
+});
+
+test('a cart that is not json at all is not a cart', () => {
+  assert.strictEqual(parseCart("<html>nope</html>"), null);
+  assert.strictEqual(parseCart(JSON.stringify([])), null);
 });

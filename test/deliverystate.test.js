@@ -141,3 +141,54 @@ test('an unreadable window is treated as no window at all', () => {
   assert.strictEqual(state.state, "ordered");
   assert.strictEqual(state.countdownTo, null);
 });
+
+test('an order that can still be changed carries the moment it closes', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_ordered",
+    cutOffAt: "2026-07-28T14:00:00.000+02:00",
+    now: "2026-07-28T10:00:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.cutOffAt, "2026-07-28T14:00:00.000+02:00");
+});
+
+test('a cut off that has passed is not carried any further', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_ordered",
+    cutOffAt: "2026-07-28T14:00:00.000+02:00",
+    now: "2026-07-28T14:00:01.000+02:00"
+  }));
+
+  assert.strictEqual(state.cutOffAt, null);
+});
+
+test('a delivery on its way is past changing, whatever the stored cut off says', () => {
+  const state = deriveDeliveryState(stored({
+    cutOffAt: "2026-07-28T23:00:00.000+02:00",
+    now: "2026-07-28T16:15:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "arriving");
+  assert.strictEqual(state.cutOffAt, null);
+});
+
+test('a delivered order left no cut off behind', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    deliveredAt: "2026-07-28T16:18:00.000+02:00",
+    cutOffAt: "2026-07-28T23:00:00.000+02:00",
+    now: "2026-07-28T16:30:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.cutOffAt, null);
+});
+
+test('an unreadable cut off is left out rather than shown as a moment in 1970', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_ordered",
+    cutOffAt: "any time now",
+    now: "2026-07-28T10:00:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.cutOffAt, null);
+});

@@ -4,8 +4,9 @@ const Homey = require('homey');
 const actions = require('./lib/actions.js');
 const conditions = require('./lib/conditions.js')
 const utils = require('./lib/utils.js');
-const { deriveOrderEvent, windowTriggersStillApply } = require('./lib/orderevent.js');
+const { deriveOrderEvent, windowTriggersStillApply, deriveOrderFacts } = require('./lib/orderevent.js');
 const { deriveDeliveryState } = require('./lib/deliverystate.js');
+const { parseCart } = require('./lib/cartresponse.js');
 const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
 const twofactor = require('./lib/twofactor.js');
 const { describeError, describeStack, describeBody, toError } = require('./lib/errors.js');
@@ -18,6 +19,15 @@ const schedule = require('node-schedule');
 var DEFAULT_POLL_INTERVAL = 1000 * 60 * 60 * 6 // 6 hours
 var ORDERED_POLL_INTERVAL = 1000 * 60 * 60 * 1 // 1 hour
 var DELIVERY_POLL_INTERVAL = 1000 * 60 * 1 // 1 minute
+
+// How long the cart the widget shows may be out of date. It is only ever
+// fetched because a dashboard is asking, so this is about how often someone
+// watching one has Picnic asked on their behalf, not about a timer.
+const CART_MAX_AGE = 1000 * 60 * 5 // 5 minutes
+
+// Where tapping the widget goes. Picnic has no documented deep link, so it is
+// the front door rather than the cart.
+const PICNIC_URL = "https://picnic.app"
 
 const DEBUG = false
 
@@ -393,9 +403,14 @@ class Picnic extends Homey.App {
 			"etaEnd": this.homey.settings.get("delivery_eta_end"),
 			"announcedAt": this.homey.settings.get("delivery_announced_at"),
 			"deliveredAt": this.homey.settings.get("delivery_time"),
+			"cutOffAt": this.homey.settings.get("delivery_cut_off"),
 			"signInNeeded": this._picnicOutOfReach(),
 			"now": now.toISOString()
 		});
+
+		// nothing planned is when the cart is worth a look, and the only time
+		// the widget shows it, so that is the only time Picnic is asked for it
+		if (state["state"] == "idle") this._refreshCartWhenStale();
 
 		return Object.assign(state, {
 			"now": now.toISOString(),
@@ -405,10 +420,13 @@ class Picnic extends Homey.App {
 			"windowStart": this.formatEtaTime(state["etaStart"]),
 			"windowEnd": this.formatEtaTime(state["etaEnd"]),
 			"deliveredTime": this.formatEtaTime(state["deliveredAt"]),
+			"cutOffTime": this.formatEtaTime(state["cutOffAt"]),
 			// a delivered order has no window left to name a day after, so the
 			// moment it arrived names it instead
 			"day": this.formatEtaDay(state["etaStart"] || state["deliveredAt"], now),
 			"price": this.homey.settings.get("order_price"),
+			"cart": this._cart || null,
+			"popupUrl": PICNIC_URL,
 			"labels": this._deliveryWidgetLabels()
 		});
 	}
@@ -454,11 +472,64 @@ class Picnic extends Homey.App {
 		const labels = {};
 
 		["signed-out", "idle", "ordered", "announced", "arriving", "overdue", "delivered",
-			"now", "day", "days", "hour", "hours", "minute", "minutes"].forEach(key => {
+			"now", "day", "days", "hour", "hours", "minute", "minutes",
+			"cart", "item", "items", "minimum", "cut-off-at", "cut-off-in"].forEach(key => {
 				labels[key] = this.homey.__("widget.delivery." + key);
 			});
 
 		return labels;
+	}
+
+	// The moment after which Picnic will not let this order be changed any
+	// more. Kept out of the event machinery on purpose: it is a fact about the
+	// slot rather than something that happened, and an order that was already
+	// open when this app version arrived has to pick it up too.
+	_storeCutOff(facts) {
+		const cutOff = facts["cutOffTime"];
+
+		if (cutOff) {
+			this.homey.settings.set("delivery_cut_off", cutOff);
+		} else {
+			this.homey.settings.unset("delivery_cut_off");
+		}
+	}
+
+	// The cart, as far as the widget is concerned. Kept in memory rather than
+	// in the settings: it is a copy of something Picnic owns, and a stale one
+	// surviving a restart would be worse than not having it at all.
+	_refreshCartWhenStale() {
+		if (this._cartRefreshing === true) return;
+		if (this._cart !== undefined && this._cart !== null && Date.now() - this._cart["refreshedAt"] < CART_MAX_AGE) return;
+
+		// no token, or a sign-in Picnic is waiting for: asking would only
+		// produce the failure the settings page already reports
+		if (!this.homey.settings.get("x-picnic-auth") || this._picnicOutOfReach()) return;
+
+		this._cartRefreshing = true;
+
+		// deliberately not awaited: the widget is waiting for an answer, and
+		// the cart it does not have yet is worth less than a fast one. What
+		// comes back is pushed to it the same way any other change is.
+		this.utils.getCart()
+			.then(body => {
+				const cart = parseCart(body);
+
+				if (cart === null) {
+					this._logProblem("Retrieving the cart", "the cart Picnic sent back could not be read");
+					return;
+				}
+
+				this._logProblem("Retrieving the cart", null);
+				this._cart = Object.assign(cart, { "refreshedAt": Date.now() });
+
+				return this._publishDeliveryState();
+			})
+			.catch(error => {
+				// the widget falls back to saying nothing is planned, which is
+				// true as far as the app knows, so this is not worth a crash
+				this._logProblem("Retrieving the cart", describeError(error));
+			})
+			.then(() => { this._cartRefreshing = false; }, () => { this._cartRefreshing = false; });
 	}
 
 	// The dashboard is not told to ask again, so a state change has to reach an
@@ -1285,6 +1356,11 @@ class Picnic extends Homey.App {
 					// the answer is the only thing that explains why it could not be read
 					return reject(toError(exception, "The order info from Picnic could not be read, it answered " + describeBody(content)));
 				}
+
+				// read on every poll rather than off an event: an order placed
+				// before this app version knew about cut off times would
+				// otherwise never get one
+				this._storeCutOff(deriveOrderFacts(summary));
 
 				const previousStatus = this.homey.settings.get("order_status")
 				const orderEvent = deriveOrderEvent(summary, previousStatus, {

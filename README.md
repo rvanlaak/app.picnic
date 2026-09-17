@@ -40,9 +40,21 @@ the wall is good at telling you: when the groceries turn up.
   running late, and afterwards the time they were delivered
 - The amount of the order is shown alongside it, which can be turned off in the
   widget's settings
+- While an order can still be changed, the widget says until when. In the last
+  hour before it closes that becomes a countdown in minutes
+- With nothing ordered, the widget shows what is in your cart and how many
+  products that is, and how much is missing when that is below the minimum
+  order value
+- Tapping the widget opens Picnic, which can be turned off in the widget's
+  settings
+
+Nothing on the widget is ever counted down in seconds: a dashboard is read in
+passing, and the minute it arrives in is as precise as that reading gets.
 
 The widget needs Homey firmware v12.1.0 or newer, which is what Homey
-Dashboards themselves need.
+Dashboards themselves need. What could not be verified while building it, for
+lack of the SDK documentation and a Picnic account, is written down in
+[VERIFICATION.md](VERIFICATION.md).
 
 ## Flow Actions
 - Adding a product to your basket based on the name of the product passed as an argument.
