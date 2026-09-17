@@ -5,6 +5,7 @@ const actions = require('./lib/actions.js');
 const conditions = require('./lib/conditions.js')
 const utils = require('./lib/utils.js');
 const { deriveOrderEvent, windowTriggersStillApply } = require('./lib/orderevent.js');
+const { deriveDeliveryState } = require('./lib/deliverystate.js');
 const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
 const twofactor = require('./lib/twofactor.js');
 const { describeError, describeStack, describeBody, toError } = require('./lib/errors.js');
@@ -379,6 +380,99 @@ class Picnic extends Homey.App {
 		}
 	}
 
+	// Everything the dashboard widget draws, in the terms it draws it in. The
+	// widget ticks its own countdown down between polls, so it is handed the
+	// moment Homey thinks it is now as well: a tablet whose clock runs a few
+	// minutes off would otherwise count down to the wrong minute.
+	async getDeliveryWidgetState() {
+		const now = new Date();
+
+		const state = deriveDeliveryState({
+			"orderStatus": this.homey.settings.get("order_status"),
+			"etaStart": this.homey.settings.get("delivery_eta_start"),
+			"etaEnd": this.homey.settings.get("delivery_eta_end"),
+			"announcedAt": this.homey.settings.get("delivery_announced_at"),
+			"deliveredAt": this.homey.settings.get("delivery_time"),
+			"signInNeeded": this._picnicOutOfReach(),
+			"now": now.toISOString()
+		});
+
+		return Object.assign(state, {
+			"now": now.toISOString(),
+			// formatted here rather than in the widget: the times belong to the
+			// timezone Homey runs in, not to the one the browser showing the
+			// dashboard happens to be in
+			"windowStart": this.formatEtaTime(state["etaStart"]),
+			"windowEnd": this.formatEtaTime(state["etaEnd"]),
+			"deliveredTime": this.formatEtaTime(state["deliveredAt"]),
+			// a delivered order has no window left to name a day after, so the
+			// moment it arrived names it instead
+			"day": this.formatEtaDay(state["etaStart"] || state["deliveredAt"], now),
+			"price": this.homey.settings.get("order_price"),
+			"labels": this._deliveryWidgetLabels()
+		});
+	}
+
+	// Whether the app is in a position to know anything about an order at all.
+	// Not to be confused with _signInRequired(), which puts it in that position.
+	_picnicOutOfReach() {
+		if (this.homey.settings.get("2fa_signin_required") === true) return true;
+
+		return !this.homey.settings.get("username") || !this.homey.settings.get("password");
+	}
+
+	// The day a delivery falls on, as someone glancing at a dashboard reads it:
+	// the ones they can plan around by name, and a date for the rest.
+	formatEtaDay(iso, now) {
+		const date = this.formatEtaDate(iso);
+		if (date == "") return "";
+
+		const today = now || new Date();
+		const tomorrow = new Date(today.getTime() + 1000 * 60 * 60 * 24);
+
+		if (date == this.formatEtaDate(today.toISOString())) return this.homey.__("widget.delivery.today");
+		if (date == this.formatEtaDate(tomorrow.toISOString())) return this.homey.__("widget.delivery.tomorrow");
+
+		try {
+			return new Intl.DateTimeFormat(this.homey.i18n.getLanguage(), {
+				timeZone: this.homey.clock.getTimezone() || undefined,
+				weekday: 'short',
+				day: 'numeric',
+				month: 'short'
+			}).format(new Date(iso));
+		} catch (exception) {
+			// a runtime that cannot name the day can still name the date
+			return date;
+		}
+	}
+
+	// The words the widget puts on the screen. They are handed over rather than
+	// translated in the widget because the countdown is retold every few seconds
+	// while the app is not asked anything, so the widget needs the sentence
+	// before it has the number to put in it. __n__ is what it fills in.
+	_deliveryWidgetLabels() {
+		const labels = {};
+
+		["signed-out", "idle", "ordered", "announced", "arriving", "overdue", "delivered",
+			"now", "day", "days", "hour", "hours", "minute", "minutes"].forEach(key => {
+				labels[key] = this.homey.__("widget.delivery." + key);
+			});
+
+		return labels;
+	}
+
+	// The dashboard is not told to ask again, so a state change has to reach an
+	// open widget by itself. The widget asks again on a timer as well, so an
+	// event nobody was listening for costs a minute rather than a wrong screen.
+	async _publishDeliveryState() {
+		try {
+			await this.homey.api.realtime("delivery_state", await this.getDeliveryWidgetState());
+		} catch (exception) {
+			// the widget will ask again by itself, so this is not worth failing a poll over
+			this.info("The dashboard widget could not be told about the new state: " + describeError(exception));
+		}
+	}
+
 	async pollOrder() {
 		return new Promise((resolve, reject) => {
 			if (this.homey.settings.getKeys().indexOf("x-picnic-auth") > -1 && this.homey.settings.getKeys().indexOf("username") > -1 && this.homey.settings.getKeys().indexOf("password") > -1) {
@@ -422,6 +516,11 @@ class Picnic extends Homey.App {
 							this.homey.settings.set("delivery_eta_end", orderEvent["eta1_end"])
 							this.homey.settings.set("delivery_date", eta_date)
 
+							// a new order has nothing announced and nothing delivered yet,
+							// and what the previous one left behind is about that one
+							this.homey.settings.unset("delivery_announced_at")
+							this.homey.settings.unset("delivery_time")
+
 							this.debug("Updating poll interval to " + ORDERED_POLL_INTERVAL / 1000 / 60 + " minutes");
 							this.homey.app.changeInterval(ORDERED_POLL_INTERVAL);
 						}
@@ -442,6 +541,11 @@ class Picnic extends Homey.App {
 							this.homey.settings.set("delivery_eta_end", orderEvent["eta2_end"])
 							this.homey.settings.set("delivery_date", tokens["eta_date"])
 
+							// the dashboard widget fills its bar between this moment and the
+							// start of the window, which is the stretch of time a delivery
+							// spends drawing near
+							this.homey.settings.set("delivery_announced_at", new Date().toISOString())
+
 							// takes care of the poll interval for this window as well
 							await this.createDeliverySchedule(orderEvent["eta2_start"], orderEvent["eta2_end"]);
 						}
@@ -457,6 +561,11 @@ class Picnic extends Homey.App {
 							this.homey.settings.set("delivery_eta_start", orderEvent["eta2_start"])
 							this.homey.settings.set("delivery_eta_end", orderEvent["eta2_end"])
 							this.homey.settings.set("delivery_date", tokens["eta_date"])
+
+							// deliberately not moving delivery_announced_at along with the
+							// window: the announcement happened when it happened, and
+							// restarting the bar on every refinement would have it crawl
+							// towards a delivery that keeps stepping away from it
 
 							// deliberately no delivery_announced trigger: the
 							// announcement already happened and firing it again
@@ -483,7 +592,16 @@ class Picnic extends Homey.App {
 							this.homey.app.changeInterval(DEFAULT_POLL_INTERVAL);
 
 							this.homey.settings.set("order_status", "groceries_delivered")
+
+							// the moment itself rather than the formatted token, so the
+							// widget can tell a delivery from an hour ago apart from one
+							// from this morning
+							this.homey.settings.set("delivery_time", orderEvent["delivery_time"])
 						}
+
+						// the dashboard has no reason to ask, so a change has to find its
+						// way to an open widget by itself
+						await this._publishDeliveryState()
 					}
 				})
 					.then(() => this._logProblem("Polling Picnic", null), error => this._pollFailed(error))

@@ -1,0 +1,24 @@
+{
+  "name": {
+    "en": "Delivery",
+    "nl": "Bezorging"
+  },
+  "height": 168,
+  "settings": [
+    {
+      "id": "show_price",
+      "type": "checkbox",
+      "value": true,
+      "title": {
+        "en": "Show what the order costs",
+        "nl": "Toon het bedrag van de bestelling"
+      }
+    }
+  ],
+  "api": {
+    "getState": {
+      "method": "GET",
+      "path": "/state"
+    }
+  }
+}

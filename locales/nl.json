@@ -32,5 +32,25 @@
     },
     "notifications": {
         "2fa-signin": "Picnic vraagt om een SMS-code voordat de app er weer in mag. Open de instellingen van de Picnic-app en log opnieuw in om er een te laten sturen."
+    },
+    "widget": {
+        "delivery": {
+            "signed-out": "Log in op de instellingenpagina van de app",
+            "idle": "Geen bezorging gepland",
+            "ordered": "Besteld",
+            "announced": "Onderweg",
+            "arriving": "Wordt bezorgd",
+            "overdue": "Later dan gepland",
+            "delivered": "Bezorgd",
+            "now": "Elk moment",
+            "day": "over __n__ dag",
+            "days": "over __n__ dagen",
+            "hour": "over __n__ uur",
+            "hours": "over __n__ uur",
+            "minute": "over __n__ min",
+            "minutes": "over __n__ min",
+            "today": "vandaag",
+            "tomorrow": "morgen"
+        }
     }
 }

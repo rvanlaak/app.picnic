@@ -1,0 +1,309 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <style>
+    /*
+     * Sizes and spacing come from Homey's own style library so the widget sits
+     * on a dashboard next to the built-in ones without looking imported, with
+     * fallbacks for every variable: a missing one would otherwise collapse the
+     * layout rather than merely change it. Everything is sized in em so that
+     * Homey's font scale setting takes the whole widget with it.
+     */
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .delivery {
+      box-sizing: border-box;
+      height: 100vh;
+      padding: var(--homey-su-4, 16px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: var(--homey-su-1, 4px);
+
+      /* the state decides the one colour on the widget, see setState() */
+      --accent: #e40613;
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      gap: var(--homey-su-2, 8px);
+      margin-bottom: var(--homey-su-1, 4px);
+      min-height: 1.2em;
+    }
+
+    .pip {
+      flex: none;
+      width: 0.5em;
+      height: 0.5em;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .state {
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .price {
+      margin-left: auto;
+      flex: none;
+      opacity: 0.6;
+    }
+
+    .headline {
+      font-size: 1.75em;
+      line-height: 1.15;
+      /* a countdown is read at a glance, a sentence is read; both have to fit */
+      overflow: hidden;
+    }
+
+    .headline[data-kind="message"] {
+      font-size: 1.1em;
+      line-height: 1.3;
+    }
+
+    .detail {
+      opacity: 0.6;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .track {
+      position: relative;
+      margin-top: var(--homey-su-3, 12px);
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    /* the faint part of the bar is drawn behind the fill rather than under it:
+       an opacity on the track would take the fill inside it down with it. It
+       is tied to the text colour, which is the one thing that already follows
+       the theme the dashboard is in. */
+    .track::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0.15;
+    }
+
+    .fill {
+      position: relative;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width 0.4s ease-out;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body class="homey-widget">
+  <div class="delivery" id="delivery">
+    <div class="top" id="top">
+      <span class="pip"></span>
+      <span class="state homey-text-small" id="state"></span>
+      <span class="price homey-text-small" id="price" hidden></span>
+    </div>
+
+    <div class="headline homey-text-bold" id="headline" aria-live="polite"></div>
+    <div class="detail homey-text-small" id="detail"></div>
+
+    <div class="track" id="track" hidden>
+      <div class="fill" id="fill"></div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    // How often the app is asked again. It also says so itself the moment
+    // something changes, so this is the net underneath that rather than the
+    // way the widget finds out.
+    var REFRESH_INTERVAL = 30 * 1000;
+
+    // How often the countdown is retold. The app is not involved: counting the
+    // minutes down is the one thing the widget can do on its own.
+    var TICK_INTERVAL = 10 * 1000;
+
+    // What each state colours the widget, and whether its headline is a
+    // countdown or something to read.
+    var STATES = {
+      'ordered': { accent: '#e40613', chip: 'ordered', kind: 'countdown' },
+      'announced': { accent: '#e40613', chip: 'announced', kind: 'countdown' },
+      'arriving': { accent: '#e40613', chip: 'arriving', kind: 'message' },
+      'overdue': { accent: '#f2a20c', chip: 'arriving', kind: 'message' },
+      'delivered': { accent: '#28a05c', chip: 'delivered', kind: 'countdown' },
+      'idle': { accent: 'currentColor', chip: null, kind: 'message' },
+      'signed_out': { accent: '#f2a20c', chip: null, kind: 'message' }
+    };
+
+    var homey = null;
+    var settings = {};
+    var state = null;
+
+    // Homey's clock, minus the clock of whatever is showing the dashboard. A
+    // tablet running four minutes fast would otherwise count down to a minute
+    // that is not the one the app is working towards.
+    var clockOffset = 0;
+
+    function element(id) {
+      return document.getElementById(id);
+    }
+
+    function onHomeyReady(Homey) {
+      homey = Homey;
+      settings = Homey.getSettings() || {};
+
+      // the app announces a new state as soon as it has one, which is what
+      // makes an announcement show up on the dashboard while you look at it
+      Homey.on('delivery_state', adopt);
+
+      var shown = false;
+      var show = function () {
+        if (shown) return;
+        shown = true;
+        Homey.ready();
+      };
+
+      // whatever the first call does, the widget is not left hidden over it
+      setTimeout(show, 3000);
+      refresh().then(show, show);
+
+      setInterval(refresh, REFRESH_INTERVAL);
+      setInterval(render, TICK_INTERVAL);
+    }
+
+    function refresh() {
+      return homey.api('GET', '/state').then(adopt, function (error) {
+        // the state on screen is the last one the app confirmed, which beats
+        // replacing it with an error over a poll that will be tried again
+        console.error(error);
+      });
+    }
+
+    function adopt(data) {
+      if (!data || typeof data != 'object') return;
+
+      state = data;
+      clockOffset = Date.parse(data['now']) - Date.now();
+      if (isNaN(clockOffset)) clockOffset = 0;
+
+      render();
+    }
+
+    // The widget's idea of what time it is, which is Homey's.
+    function now() {
+      return Date.now() + clockOffset;
+    }
+
+    function label(key) {
+      return (state && state['labels'] && state['labels'][key]) || '';
+    }
+
+    function count(key, value) {
+      return label(key).replace('__n__', String(value));
+    }
+
+    // How long is left, in the largest unit that still says something useful.
+    // Minutes are rounded up so that a delivery does not arrive "in 0 min".
+    function remaining(target) {
+      var left = Date.parse(target) - now();
+      if (isNaN(left) || left <= 0) return label('now');
+
+      var minutes = Math.ceil(left / 60000);
+      if (minutes < 60) return count(minutes == 1 ? 'minute' : 'minutes', minutes);
+
+      var hours = Math.round(left / 3600000);
+      if (hours < 24) return count(hours == 1 ? 'hour' : 'hours', hours);
+
+      var days = Math.round(left / 86400000);
+      return count(days == 1 ? 'day' : 'days', days);
+    }
+
+    function windowText(data) {
+      if (!data['windowStart'] || !data['windowEnd']) return data['windowStart'] || '';
+      return data['windowStart'] + ' – ' + data['windowEnd'];
+    }
+
+    function price(data) {
+      if (settings['show_price'] === false) return '';
+
+      var amount = data['price'];
+      if (typeof amount != 'number' || !isFinite(amount) || amount <= 0) return '';
+
+      try {
+        return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' }).format(amount);
+      } catch (exception) {
+        return '€ ' + amount.toFixed(2);
+      }
+    }
+
+    // What the headline says, and the line underneath it.
+    function lines(data) {
+      switch (data['state']) {
+        case 'ordered':
+        case 'announced':
+          return data['countdownTo']
+            ? { headline: remaining(data['countdownTo']), detail: join(data['day'], windowText(data)) }
+            : { headline: label('ordered'), detail: '', kind: 'message' };
+        case 'arriving':
+          return { headline: label('now'), detail: join(data['day'], windowText(data)) };
+        case 'overdue':
+          return { headline: label('overdue'), detail: join(data['day'], windowText(data)) };
+        case 'delivered':
+          return { headline: data['deliveredTime'], detail: data['day'] };
+        case 'signed_out':
+          return { headline: label('signed-out'), detail: '' };
+        default:
+          return { headline: label('idle'), detail: '' };
+      }
+    }
+
+    function join(left, right) {
+      if (!left) return right || '';
+      if (!right) return left;
+      return left + ' · ' + right;
+    }
+
+    function render() {
+      if (state === null) return;
+
+      var appearance = STATES[state['state']] || STATES['idle'];
+      var text = lines(state);
+
+      element('delivery').style.setProperty('--accent', appearance.accent);
+
+      element('top').hidden = appearance.chip === null;
+      element('state').textContent = appearance.chip ? label(appearance.chip) : '';
+
+      var amount = price(state);
+      element('price').textContent = amount;
+      element('price').hidden = amount == '';
+
+      element('headline').textContent = text.headline;
+      element('headline').dataset.kind = text.kind || appearance.kind;
+
+      element('detail').textContent = text.detail;
+
+      var progress = state['progress'];
+      var known = typeof progress == 'number' && isFinite(progress);
+      element('track').hidden = !known;
+      element('fill').style.width = known ? Math.round(progress * 100) + '%' : '0%';
+    }
+  </script>
+</body>
+
+</html>

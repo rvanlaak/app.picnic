@@ -28,6 +28,22 @@ Polling the status of your Picnic account and providing trigger flowcards based 
   - eta begin and eta end of the timeframe the delivery was expected in
   - delivery time, the moment the groceries were actually delivered. Picnic usually drops a finished delivery from its response without saying when it arrived, in which case this is the moment the app noticed
 
+## Dashboard Widget
+A "Delivery" widget for Homey Dashboards, which shows the one thing a screen on
+the wall is good at telling you: when the groceries turn up.
+
+- An order that has been placed shows the day and the slot Picnic will deliver
+  in, counting down towards it
+- Once Picnic announces the delivery moment, the countdown is to that window
+  instead, with a bar that fills between the announcement and the delivery
+- During the window it says the groceries are arriving, after it that Picnic is
+  running late, and afterwards the time they were delivered
+- The amount of the order is shown alongside it, which can be turned off in the
+  widget's settings
+
+The widget needs Homey firmware v12.1.0 or newer, which is what Homey
+Dashboards themselves need.
+
 ## Flow Actions
 - Adding a product to your basket based on the name of the product passed as an argument.
 - Adding products based on a recipe as configured via the settings page.
