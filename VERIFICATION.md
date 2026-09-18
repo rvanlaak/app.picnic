@@ -72,13 +72,14 @@ Assistant's Picnic integration.
   None of the public clients handle this code. The app now treats it as a
   sign-in being needed rather than as a failed poll, which is what left the
   widget showing an order from months before as running late.
-- [x] **What the total means.** Read off a real cart: `total_price` 2207 with
-  `checkout_total_price` the same number, order lines adding up to 3129 and
-  `total_savings` 922, so the total Picnic states is its lines minus its
-  discounts. The Picnic app showed €22,03 for that same cart, four cents under
-  it, which would need savings of 926: the difference is inside Picnic's own
-  promo rounding (three of the nine lines carried `PROMO+PRICE`) rather than in
-  a field being read wrongly. The widget states Picnic's own total.
+- [x] **What the total means.** The widget showed €33,14 for a cart the Picnic
+  app put at €32,86. Picnic works the cart out for the app version a client
+  claims in `x-picnic-agent`, and this app claimed 1.15.233: that cart had no
+  BundelBonus deals and no separate Family discount. Claiming 1.236.1, what the
+  maintained TypeScript client sends, gave `total_price` 3286, `total_savings`
+  927 and `membership_savings` 147, the Picnic app's total, other discounts and
+  Family discount to the cent. Login, the poll and the cart all work with it.
+  → `docs/picnic-api.md`, `lib/picnicheaders.js`
 - [ ] **Which total the minimum is measured against.** Still unconfirmed, and
   the same four cents apply to it.
 - [ ] **What a returned container is worth.** `returned_containers` entries are
