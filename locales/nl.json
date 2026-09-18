@@ -57,18 +57,19 @@
             "minutes": "min",
             "today": "vandaag",
             "tomorrow": "morgen",
-            "cart": "In je mandje",
+            "cart": "Nog niet besteld",
             "item": "__n__ product",
             "items": "__n__ producten",
             "minimum": "Nog __t__ tot het minimum",
             "no-slot": "Geen bezorgmoment gekozen",
-            "order-before": "Bestel vóór __t__",
-            "order-in": "Bestel binnen __n__ min",
+            "order-before": "vóór",
             "cut-off-at": "Bijbestellen tot __t__",
             "cut-off-in": "Bijbestellen: nog __n__ min",
             "to-order-at": "__a__ nog bijbestellen, tot __t__",
             "to-order-in": "__a__ nog bijbestellen, __n__ min",
-            "deposit-returned": "+__t__ statiegeld"
+            "deposit-returned": "+__t__ statiegeld",
+            "order-within": "nog",
+            "slot-closed": "Te laat voor dit bezorgmoment"
         }
     }
 }

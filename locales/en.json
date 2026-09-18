@@ -57,18 +57,19 @@
             "minutes": "min",
             "today": "today",
             "tomorrow": "tomorrow",
-            "cart": "In your cart",
+            "cart": "Not ordered yet",
             "item": "__n__ product",
             "items": "__n__ products",
             "minimum": "__t__ short of the minimum",
             "no-slot": "No delivery slot picked",
-            "order-before": "Order before __t__",
-            "order-in": "Order within __n__ min",
+            "order-before": "before",
             "cut-off-at": "Add until __t__",
             "cut-off-in": "__n__ min left to add",
             "to-order-at": "__a__ still to add, until __t__",
             "to-order-in": "__a__ still to add, __n__ min left",
-            "deposit-returned": "+__t__ deposit back"
+            "deposit-returned": "+__t__ deposit back",
+            "order-within": "in",
+            "slot-closed": "Too late for this slot"
         }
     }
 }

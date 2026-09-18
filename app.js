@@ -482,10 +482,13 @@ class Picnic extends Homey.App {
 				"productCount": cart["productCount"],
 				"minimumShort": cart["minimumShort"],
 				"slotChosen": cart["slotChosen"],
+				"slotClosed": cart["slotClosed"],
 				"slot": slot ? {
 					"day": this.formatEtaDay(slot["windowStart"], now),
 					"window": this._formatWindow(slot["windowStart"], slot["windowEnd"]),
 					"cutOffAt": slot["cutOffAt"],
+					"cutOffTime": this.formatEtaTime(slot["cutOffAt"]),
+					"cutOffDay": this.formatEtaDay(slot["cutOffAt"], now),
 					"cutOffLabel": this._formatMoment(slot["cutOffAt"], now)
 				} : null
 			} : null,
@@ -568,7 +571,7 @@ class Picnic extends Homey.App {
 		["signed-out", "signed-out-detail", "stale", "stale-since", "empty", "empty-cart",
 			"ordered", "announced", "arriving", "overdue", "delivered", "delivered-at",
 			"now", "in", "at", "day", "days", "hour", "hours", "minute", "minutes",
-			"cart", "item", "items", "minimum", "no-slot", "order-before", "order-in",
+			"cart", "item", "items", "minimum", "no-slot", "slot-closed", "order-before", "order-within",
 			"cut-off-at", "cut-off-in", "to-order-at", "to-order-in",
 			"deposit-returned", "deposit-pending"].forEach(key => {
 				labels[key] = this.homey.__("widget.delivery." + key);

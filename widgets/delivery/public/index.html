@@ -29,23 +29,37 @@
       flex-direction: column;
       font-variant-numeric: tabular-nums;
 
+      /* Picnic's own badge colours: its red, the green of its "Family" badge
+         and the yellow of its "Actie" one. Each comes as the fill of a badge,
+         the text on that fill, and an ink for text and icons on the widget
+         itself, where the fill would not always be readable. */
       --brand: #e40613;
-      --warn: var(--homey-color-orange, #f2a20c);
-      --good: var(--homey-color-green, #28a05c);
+      --brand-on: #ffffff;
+      --brand-ink: #e40613;
+      --good: #295813;
+      --good-on: #ffffff;
+      --good-ink: #295813;
+      --warn: #f6d94a;
+      --warn-on: #1b1b1d;
+      --warn-ink: #8a6a00;
       --muted: var(--homey-text-color-light, #8a8a8a);
+
       /* the one colour a state gives the widget, see STATES below */
       --tone: var(--muted);
+      --tone-on: #ffffff;
+      --tone-ink: var(--muted);
     }
 
-    /* Picnic's red, lifted a little on a dark dashboard where the brand red
-       itself is too dark to read as text */
+    /* on a dark dashboard the inks are lifted until they read as text */
     .homey-dark-mode .tile {
-      --brand: #ff4b52;
+      --brand-ink: #ff4b52;
+      --good-ink: #7cc45a;
+      --warn-ink: #f6d94a;
     }
 
-    .tile[data-tone="brand"] { --tone: var(--brand); }
-    .tile[data-tone="warn"] { --tone: var(--warn); }
-    .tile[data-tone="good"] { --tone: var(--good); }
+    .tile[data-tone="brand"] { --tone: var(--brand); --tone-on: var(--brand-on); --tone-ink: var(--brand-ink); }
+    .tile[data-tone="warn"] { --tone: var(--warn); --tone-on: var(--warn-on); --tone-ink: var(--warn-ink); }
+    .tile[data-tone="good"] { --tone: var(--good); --tone-on: var(--good-on); --tone-ink: var(--good-ink); }
 
     .head {
       display: flex;
@@ -61,9 +75,9 @@
       border-radius: 8px;
       display: grid;
       place-items: center;
-      color: var(--tone);
+      color: var(--tone-ink);
       background: rgba(128, 128, 128, 0.14);
-      background: color-mix(in srgb, var(--tone) 14%, transparent);
+      background: color-mix(in srgb, var(--tone) 18%, transparent);
     }
 
     .badge svg {
@@ -77,24 +91,33 @@
       stroke-linejoin: round;
     }
 
-    .badge[data-icon="bag"] .i-bag,
+    .badge[data-icon="scheduled"] .i-scheduled,
     .badge[data-icon="truck"] .i-truck,
     .badge[data-icon="clock"] .i-clock,
     .badge[data-icon="check"] .i-check,
-    .badge[data-icon="cart"] .i-cart,
+    .badge[data-icon="basket"] .i-basket,
     .badge[data-icon="alert"] .i-alert {
       display: block;
     }
 
+    /* what the state is called, as a badge the way Picnic's app labels its
+       offers: a filled rounded rectangle with the text set on it */
     .status {
       min-width: 0;
+      padding: 1px 8px;
+      border-radius: 6px;
+      background: var(--tone);
+      color: var(--tone-on);
       font-size: var(--homey-font-size-small, 14px);
       line-height: var(--homey-line-height-small, 20px);
-      font-weight: var(--homey-font-weight-medium, 500);
-      color: var(--tone);
+      font-weight: var(--homey-font-weight-bold, 700);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .status:empty {
+      display: none;
     }
 
     .meta {
@@ -188,7 +211,7 @@
       position: relative;
       height: 100%;
       border-radius: inherit;
-      background: var(--tone);
+      background: var(--tone-ink);
       transition: width 0.4s ease-out;
     }
 
@@ -201,8 +224,9 @@
       font-weight: var(--homey-font-weight-medium, 500);
     }
 
-    .note[data-tone="warn"] { color: var(--warn); }
-    .note[data-tone="good"] { color: var(--good); }
+    /* something to hurry for is Picnic's red, something good its green */
+    .note[data-tone="warn"] { color: var(--brand-ink); }
+    .note[data-tone="good"] { color: var(--good-ink); }
 
     /* A half width tile on a phone has room for one thing per line, so the
        amount next to the status makes way for the status itself. */
@@ -224,6 +248,11 @@
       .badge svg {
         width: 14px;
         height: 14px;
+      }
+
+      /* the badge says what the state is on its own, the icon only repeats it */
+      .head:has(.status:not(:empty)) .badge {
+        display: none;
       }
 
       /* and where there is not, underneath each other */
@@ -260,11 +289,11 @@
   <div class="tile" id="tile">
     <div class="head">
       <span class="badge" id="badge" aria-hidden="true">
-        <svg class="i-bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>
-        <svg class="i-truck" viewBox="0 0 24 24"><path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>
+        <svg class="i-scheduled" viewBox="0 0 24 24"><circle cx="7" cy="7" r="5" /><path d="M7 4.6V7l1.6 1" /><path d="M12.5 9H16v8H3.5v-4.5" /><path d="M16 11h3.4l2.6 3.2V17h-6" /><circle cx="7.5" cy="18.3" r="1.9" /><circle cx="18" cy="18.3" r="1.9" /></svg>
+        <svg class="i-truck" viewBox="0 0 24 24"><path d="M2 6h13v11H2z" /><path d="M15 10h4l3 3.5V17h-7" /><circle cx="6.5" cy="18.3" r="1.9" /><circle cx="18" cy="18.3" r="1.9" /></svg>
         <svg class="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
         <svg class="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
-        <svg class="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+        <svg class="i-basket" viewBox="0 0 24 24"><path d="M6.5 10c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" /><path d="M2.5 10h19l-2.1 9.3a1.8 1.8 0 0 1-1.8 1.4H6.4a1.8 1.8 0 0 1-1.8-1.4Z" /></svg>
         <svg class="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
       </span>
       <span class="status" id="status"></span>
@@ -301,13 +330,13 @@
     // What each state looks like: its colour, its icon and what it is called
     // at the top. The words themselves come from the app.
     var STATES = {
-      'ordered': { tone: 'brand', icon: 'bag', status: 'ordered' },
+      'ordered': { tone: 'brand', icon: 'scheduled', status: 'ordered' },
       'announced': { tone: 'brand', icon: 'truck', status: 'announced' },
       'arriving': { tone: 'brand', icon: 'truck', status: 'arriving' },
       'overdue': { tone: 'warn', icon: 'clock', status: 'overdue' },
       'delivered': { tone: 'good', icon: 'check', status: 'delivered' },
-      'cart': { tone: 'brand', icon: 'cart', status: 'cart' },
-      'empty': { tone: 'muted', icon: 'cart', status: null },
+      'cart': { tone: 'brand', icon: 'basket', status: 'cart' },
+      'empty': { tone: 'muted', icon: 'basket', status: null },
       'signed_out': { tone: 'warn', icon: 'alert', status: null },
       'stale': { tone: 'warn', icon: 'alert', status: null }
     };
@@ -535,25 +564,42 @@
 
         case 'cart':
           var cart = data['cart'] || {};
-          var slot = cart['slotChosen'] ? cart['slot'] : null;
+          // a slot someone picked, and that can still be ordered for; the one
+          // Picnic suggests by itself is held for nobody, so it is not named
+          var slot = cart['slotChosen'] && cart['slot'] && cart['slot']['cutOffAt'] ? cart['slot'] : null;
+          var amount = showPrices() && isAmount(cart['totalPrice']) ? money(cart['totalPrice']) : '';
 
-          shown.kind = 'countdown';
-          if (showPrices() && isAmount(cart['totalPrice'])) {
-            shown.headline = money(cart['totalPrice']);
-            shown.meta = products(cart['productCount']);
+          shown.meta = products(cart['productCount']);
+
+          if (slot) {
+            // The cart is not an order until it has been through the checkout,
+            // and that has to happen before the slot's deadline: that deadline
+            // is the one thing on the widget to act on, so it is the headline.
+            var minutes = minutesUntil(slot['cutOffAt']);
+            shown.kind = 'countdown';
+
+            if (minutes !== null && minutes <= URGENT_MINUTES) {
+              shown.tone = 'warn';
+              shown.pre = label('order-within');
+              shown.headline = String(minutes);
+              shown.unit = label(minutes == 1 ? 'minute' : 'minutes');
+            } else {
+              shown.pre = label('order-before');
+              shown.headline = slot['cutOffTime'];
+              // today goes without saying; any other day does not
+              shown.unit = slot['cutOffDay'] && slot['cutOffDay'] != label('today') ? slot['cutOffDay'] : '';
+            }
+
+            shown.when = amount;
+            shown.what = [slot['day'], slot['window']].filter(Boolean).join(' ');
           } else {
-            shown.headline = products(cart['productCount']);
+            shown.kind = 'countdown';
+            shown.headline = amount || products(cart['productCount']);
+            shown.when = cart['slotClosed'] ? label('slot-closed') : label('no-slot');
           }
-
-          // a slot someone picked is when this would arrive; the one Picnic
-          // suggests by itself is not held for anyone, so it is not named
-          shown.when = slot ? slot['day'] : label('no-slot');
-          shown.what = slot ? slot['window'] : '';
 
           if (isAmount(cart['minimumShort']) && cart['minimumShort'] > 0) {
             shown.note = { text: text('minimum', { t: money(cart['minimumShort']) }), tone: 'warn' };
-          } else if (slot) {
-            shown.note = deadline(slot['cutOffAt'], slot['cutOffLabel'], 'order-before', 'order-in', {});
           }
           break;
 

@@ -52,9 +52,10 @@ the wall is good at telling you: when the groceries turn up.
 - With nothing ordered at all, the widget shows what is in your cart and how
   many products that is, and how much is missing when that is below the
   minimum order value
-- It also shows the delivery moment your cart is set to, and says when none has
-  been picked yet: until you pick one nothing is held for you. Once one is
-  picked, the widget says when the order has to be placed by
+- It says your cart is not ordered yet, and which delivery moment it is set
+  to, or that none has been picked: until you pick one nothing is held for
+  you. Once one is picked, the deadline to order by is what the widget leads
+  with, counted down in minutes over the last hour
 - When the app has not been able to reach Picnic in over a day, the widget says
   so and when it last heard, rather than passing off what it knew as news
 

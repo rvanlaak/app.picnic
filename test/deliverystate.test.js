@@ -304,6 +304,13 @@ test('a chosen slot whose ordering deadline passed keeps its window but not its 
 
   assert.strictEqual(state.cart.slot.cutOffAt, null);
   assert.strictEqual(state.cart.slot.windowStart, CART.slot.windowStart);
+  assert.strictEqual(state.cart.slotClosed, true);
+});
+
+test('a chosen slot that can still be ordered for is not closed', () => {
+  const state = deriveDeliveryState(stored({ orderStatus: "", cart: CART }));
+
+  assert.strictEqual(state.cart.slotClosed, false);
 });
 
 test('an empty cart is the empty state, and says the cart was looked at', () => {

@@ -91,7 +91,15 @@ function payload(stored, extra) {
       productCount: cart.productCount,
       minimumShort: cart.minimumShort,
       slotChosen: cart.slotChosen,
-      slot: cart.slot ? { day: 'Sat 20 Sep', window: '18:15–19:15', cutOffAt: cart.slot.cutOffAt, cutOffLabel: 'Fri 19 Sep 23:00' } : null
+      slotClosed: cart.slotClosed,
+      slot: cart.slot ? {
+        day: 'Sat 20 Sep',
+        window: '18:15–19:15',
+        cutOffAt: cart.slot.cutOffAt,
+        cutOffTime: cart.slot.cutOffAt ? '23:00' : '',
+        cutOffDay: cart.slot.cutOffAt ? 'Fri 19 Sep' : '',
+        cutOffLabel: cart.slot.cutOffAt ? 'Fri 19 Sep 23:00' : ''
+      } : null
     } : null,
     cartKnown: derived.cartKnown,
     checkedLabel: derived.checkedAt ? 'Sun 5 Apr 08:00' : '',
@@ -138,7 +146,7 @@ test('an order days out counts in days and shows no bar', () => {
   }));
 
   assert.strictEqual(nodes.status.textContent, 'Ordered');
-  assert.strictEqual(nodes.badge.dataset.icon, 'bag');
+  assert.strictEqual(nodes.badge.dataset.icon, 'scheduled');
   assert.strictEqual(headline(), 'in 2 days');
   assert.strictEqual(nodes.track.hidden, true);
 });
@@ -252,8 +260,14 @@ test('amounts can be turned off', () => {
   adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
   assert.strictEqual(nodes.meta.textContent, '');
 
-  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
+  adopt(payload({ orderStatus: '', cart: cart({ slot: null }), now: '2026-07-28T10:00:00.000+02:00' }));
   assert.strictEqual(headline(), '9 products');
+
+  // and a cart with a slot keeps its deadline, just not the amount under it
+  const deadline = harness({ show_price: false });
+  deadline.adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
+  assert.strictEqual(deadline.headline(), 'before 23:00 Fri 19 Sep');
+  assert.strictEqual(deadline.detail(), 'Sat 20 Sep 18:15–19:15');
 });
 
 test('a clock that runs ahead of Homey does not count down to the wrong minute', () => {
@@ -350,21 +364,60 @@ test('the last hour to add to an open order counts down next to the amount', () 
   assert.strictEqual(nodes.note.textContent, '€12.40 still to add, 25 min left');
 });
 
-test('a cart with a slot picked shows its amount, the slot and when to order by', () => {
+test('a cart with a slot picked is not an order yet, and says until when it can become one', () => {
   const { nodes, adopt, headline, detail } = harness();
 
   adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
 
-  assert.strictEqual(nodes.status.textContent, 'In your cart');
-  assert.strictEqual(nodes.badge.dataset.icon, 'cart');
-  assert.strictEqual(headline(), '€22.03');
+  assert.strictEqual(nodes.status.textContent, 'Not ordered yet');
+  assert.strictEqual(nodes.tile.dataset.tone, 'brand');
+  assert.strictEqual(nodes.badge.dataset.icon, 'basket');
+  assert.strictEqual(headline(), 'before 23:00 Fri 19 Sep');
+  assert.strictEqual(detail(), '€22.03 · Sat 20 Sep 18:15–19:15');
   assert.strictEqual(nodes.meta.textContent, '9 products');
-  assert.strictEqual(detail(), 'Sat 20 Sep · 18:15–19:15');
-  assert.strictEqual(nodes.note.textContent, 'Order before Fri 19 Sep 23:00');
+  assert.strictEqual(nodes.note.hidden, true);
+});
+
+test('a deadline today goes without its day', () => {
+  const { adopt, headline } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }, {
+    cart: { totalPrice: 32.86, productCount: 18, minimumShort: 12.14, slotChosen: true, slotClosed: false, slot: { day: 'tomorrow', window: '08:30–09:30', cutOffAt: '2026-07-29T13:00:00.000+02:00', cutOffTime: '13:00', cutOffDay: 'today' } }
+  }));
+
+  assert.strictEqual(headline(), 'before 13:00');
+});
+
+test('the order deadline and the missing amount are both said', () => {
+  const { nodes, adopt, headline } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 32.86, productCount: 18, minimumOrderValue: 45 }), now: '2026-07-28T10:00:00.000+02:00' }));
+
+  assert.strictEqual(headline(), 'before 23:00 Fri 19 Sep');
+  assert.strictEqual(nodes.note.textContent, '€12.14 short of the minimum');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
+});
+
+test('the last hour to order a picked slot is counted down, in the colour to hurry in', () => {
+  const { nodes, adopt, headline } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T22:20:00.000+02:00' }));
+
+  assert.strictEqual(headline(), 'in 40 min');
+  assert.strictEqual(nodes.tile.dataset.tone, 'warn');
+});
+
+test('a picked slot whose deadline passed is said to be too late, not unpicked', () => {
+  const { adopt, headline, detail } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T23:30:00.000+02:00' }));
+
+  assert.strictEqual(headline(), '€22.03');
+  assert.strictEqual(detail(), 'Too late for this slot');
 });
 
 test('a cart without a picked slot says none was picked, rather than naming Picnic\'s guess', () => {
-  const { adopt, detail } = harness();
+  const { adopt, headline, detail } = harness();
 
   adopt(payload({
     orderStatus: '',
@@ -372,25 +425,17 @@ test('a cart without a picked slot says none was picked, rather than naming Picn
     now: '2026-07-28T10:00:00.000+02:00'
   }));
 
+  assert.strictEqual(headline(), '€22.03');
   assert.strictEqual(detail(), 'No delivery slot picked');
 });
 
-test('a cart below the minimum says how much is missing before anything else', () => {
+test('a cart below the minimum says how much is missing', () => {
   const { nodes, adopt } = harness();
 
   adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-28T10:00:00.000+02:00' }));
 
   assert.strictEqual(nodes.meta.textContent, '1 product');
   assert.strictEqual(nodes.note.textContent, '€6.80 short of the minimum');
-  assert.strictEqual(nodes.note.dataset.tone, 'warn');
-});
-
-test('the last hour to order a picked slot is counted down', () => {
-  const { nodes, adopt } = harness();
-
-  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T22:20:00.000+02:00' }));
-
-  assert.strictEqual(nodes.note.textContent, 'Order within 40 min');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
@@ -406,7 +451,7 @@ test('a cart that can no longer be added to an order is not held over the reader
 test('amounts are written in Homey\'s language', () => {
   const { adopt, headline } = harness();
 
-  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }, { locale: 'nl' }));
+  adopt(payload({ orderStatus: '', cart: cart({ slot: null }), now: '2026-07-28T10:00:00.000+02:00' }, { locale: 'nl' }));
 
   assert.strictEqual(headline(), '€ 22,03');
 });
