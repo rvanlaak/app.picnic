@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { deriveDeliveryState } = require('../lib/deliverystate.js');
+const { deriveDeliveryState, orderCheckDue, ORDER_MAX_AGE } = require('../lib/deliverystate.js');
 
 const WINDOW_START = "2026-07-28T16:00:00.000+02:00";
 const WINDOW_END = "2026-07-28T17:00:00.000+02:00";
@@ -365,4 +365,49 @@ test('a delivery Picnic itself put a moment on is shown without a window', () =>
   }));
 
   assert.strictEqual(state.state, "delivered");
+});
+
+const NOW_MS = Date.parse("2026-09-18T12:32:00.000+02:00");
+const AGO = (minutes) => new Date(NOW_MS - minutes * 60 * 1000).toISOString();
+
+test('with no order being followed, Picnic is asked about orders once the last answer is five minutes old', () => {
+  ["empty", "cart", "delivered", "stale"].forEach(state => {
+    assert.strictEqual(orderCheckDue(state, AGO(4), NOW_MS, false), false, state + " at four minutes");
+    assert.strictEqual(orderCheckDue(state, AGO(5), NOW_MS, false), true, state + " at five minutes");
+  });
+  assert.strictEqual(ORDER_MAX_AGE, 5 * 60 * 1000);
+});
+
+test('an app that never heard from Picnic asks right away', () => {
+  assert.strictEqual(orderCheckDue("empty", null, NOW_MS, false), true);
+});
+
+test('a cart that was just emptied is asked about right away, however recent the last answer', () => {
+  assert.strictEqual(orderCheckDue("empty", AGO(0), NOW_MS, true), true);
+});
+
+test('an order already being followed is left to the poll, and a signed out app cannot ask', () => {
+  ["ordered", "announced", "arriving", "overdue", "signed_out"].forEach(state => {
+    assert.strictEqual(orderCheckDue(state, AGO(60), NOW_MS, true), false, state);
+  });
+});
+
+test('an order placed after the last delivery shows with the deadline to add to it', () => {
+  // the state the poll leaves once it has found the order: tomorrow 08:30 to
+  // 09:30, closing today at 13:00, with nothing in the cart
+  const state = deriveDeliveryState({
+    orderStatus: "groceries_ordered",
+    etaStart: "2026-09-19T08:30:00.000+02:00",
+    etaEnd: "2026-09-19T09:30:00.000+02:00",
+    cutOffAt: "2026-09-18T13:00:00.000+02:00",
+    checkedAt: "2026-09-18T12:32:00.000+02:00",
+    cart: { totalPrice: 0, productCount: 0 },
+    now: "2026-09-18T12:32:00.000+02:00"
+  });
+
+  assert.strictEqual(state.state, "ordered");
+  assert.strictEqual(state.countdownTo, "2026-09-19T08:30:00.000+02:00");
+  assert.strictEqual(state.cutOffAt, "2026-09-18T13:00:00.000+02:00");
+  // an empty cart has nothing still to add
+  assert.strictEqual(state.cart, null);
 });

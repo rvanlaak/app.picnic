@@ -483,3 +483,21 @@ test('every word the widget asks for is one the app hands over', () => {
     assert.ok(LABELS[key], 'no English text for "' + key + '"');
   });
 });
+
+test('a placed order with twenty minutes left to add to says so, whatever the delivery is still hours away', () => {
+  const { nodes, adopt, headline, detail } = harness();
+
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-09-19T08:30:00.000+02:00',
+    etaEnd: '2026-09-19T09:30:00.000+02:00',
+    cutOffAt: '2026-09-18T13:00:00.000+02:00',
+    cart: { totalPrice: 0, productCount: 0 },
+    now: '2026-09-18T12:40:00.000+02:00'
+  }));
+
+  assert.strictEqual(nodes.status.textContent, 'Ordered');
+  assert.strictEqual(headline(), 'in 20 hours');
+  assert.strictEqual(nodes.note.textContent, '20 min left to add');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
+});

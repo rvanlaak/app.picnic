@@ -218,3 +218,21 @@ test('the delivery being followed is remembered by its id', () => {
   assert.strictEqual(deriveOrderFacts(summary()).deliveryId, null);
   assert.strictEqual(deriveOrderFacts([]).deliveryId, null);
 });
+
+test('an order placed after the last delivery is a new order, not more of the old one', () => {
+  const placed = [{
+    delivery_id: "d2",
+    status: "CURRENT",
+    slot: { window_start: "2026-09-19T08:30:00.000+02:00", window_end: "2026-09-19T09:30:00.000+02:00", cut_off_time: "2026-09-18T13:00:00.000+02:00" },
+    orders: [{ total_price: 4512 }]
+  }];
+
+  assert.deepStrictEqual(deriveOrderEvent(placed, "groceries_delivered", null, NOW), {
+    event: "groceries_ordered",
+    price: 45.12,
+    eta1_start: "2026-09-19T08:30:00.000+02:00",
+    eta1_end: "2026-09-19T09:30:00.000+02:00"
+  });
+  assert.strictEqual(deriveOrderFacts(placed).cutOffTime, "2026-09-18T13:00:00.000+02:00");
+  assert.strictEqual(deriveOrderFacts(placed).deliveryId, "d2");
+});

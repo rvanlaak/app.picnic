@@ -16,9 +16,10 @@ needs a real account, a real delivery or a real dashboard to settle.
   what went back, and the widget drops a delivery four hours after it arrived.
   If counting usually takes longer, nobody sees it there, and it belongs in a
   notification or a flow trigger instead.
-- [ ] **Politeness.** The cart is fetched at most once every five minutes, and a
-  made delivery at most once every ten, and only while a dashboard shows the
-  widget. Confirm Picnic does not rate limit either.
+- [ ] **Politeness.** While a dashboard shows the widget, the cart and, with no
+  order being followed, the order summary are each fetched at most once every
+  five minutes, and a made delivery at most once every ten. Confirm Picnic does
+  not rate limit any of them.
 - [ ] **A delivery noticed long after its window.** The widget no longer shows
   it as delivered, but the "groceries delivered" trigger still fires when the
   app catches up, stamped with the moment it noticed. Decide whether a trigger

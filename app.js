@@ -5,7 +5,7 @@ const actions = require('./lib/actions.js');
 const conditions = require('./lib/conditions.js')
 const utils = require('./lib/utils.js');
 const { deriveOrderEvent, windowTriggersStillApply, deriveOrderFacts } = require('./lib/orderevent.js');
-const { deriveDeliveryState } = require('./lib/deliverystate.js');
+const { deriveDeliveryState, orderCheckDue } = require('./lib/deliverystate.js');
 const { parseCart } = require('./lib/cartresponse.js');
 const { parseDelivery } = require('./lib/deliveryresponse.js');
 const cutoff = require('./lib/cutoff.js');
@@ -450,6 +450,12 @@ class Picnic extends Homey.App {
 		// dashboard: when it really arrived, and what came back in deposit.
 		if (state["state"] == "delivered" && deliveryId) this._refreshDeliveryWhenStale(deliveryId);
 
+		// Between deliveries the poll runs every six hours, which is how an
+		// order placed in the Picnic app went unnoticed until long after its
+		// deadline to add to it. While a dashboard is looking, Picnic is asked
+		// about orders as often as it is asked about the cart.
+		if (orderCheckDue(state["state"], this.homey.settings.get("order_checked_at"), now.getTime(), false)) this._refreshOrder();
+
 		const cart = state["cart"];
 		const slot = cart && cart["slot"];
 		const delivery = state["delivery"];
@@ -626,7 +632,13 @@ class Picnic extends Homey.App {
 				}
 
 				this._logProblem("Retrieving the cart", null);
+				// the cart going from something to nothing is what placing an
+				// order looks like from here, so that is asked about right away
+				const emptied = this._cart && this._cart["productCount"] > 0 && !(cart["productCount"] > 0);
+
 				this._cart = Object.assign(cart, { "refreshedAt": Date.now() });
+
+				if (emptied) this._refreshOrder();
 
 				return this._publishDeliveryState();
 			})
@@ -638,6 +650,21 @@ class Picnic extends Homey.App {
 				this._logProblem("Retrieving the cart", describeError(error));
 			})
 			.then(() => { this._cartRefreshing = false; }, () => { this._cartRefreshing = false; });
+	}
+
+	// Asks Picnic about orders outside the poll's own schedule, on behalf of a
+	// widget that is being looked at. The poll does the work, so an order
+	// found this way fires its flows and is published like any other.
+	_refreshOrder() {
+		if (this._orderRefreshing === true) return;
+		if (!this.homey.settings.get("x-picnic-auth") || this._picnicOutOfReach()) return;
+
+		this._orderRefreshing = true;
+
+		// the poll settles either way, so the flag is always cleared
+		Promise.resolve(this.pollOrder())
+			.catch(error => this._logProblem("Asking Picnic about orders", describeError(error)))
+			.then(() => { this._orderRefreshing = false; });
 	}
 
 	// The delivery that was just made, as far as the widget is concerned. In
