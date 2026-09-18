@@ -47,8 +47,12 @@ function widgetStates(language, at) {
       payload: Object.assign({ state: 'ordered', countdownTo: iso(3 * 24 * 60), cutOffAt: iso(2 * 24 * 60), cutOffLabel: 'za 20 sep 13:00', cart: null }, order, { day: 'za 20 sep' })
     },
     'announced': {
-      title: 'On its way, 14 minutes out',
-      payload: Object.assign({ state: 'announced', countdownTo: iso(14), progress: 0.62 }, order, { day: today, window: '16:11–16:31', windowEnd: iso(34) })
+      title: 'Window announced for tomorrow, van not on the road yet',
+      payload: Object.assign({ state: 'announced', countdownTo: iso(19 * 60), progress: null, cutOffAt: null, cart: null }, order, { window: '08:59–09:19', windowEnd: iso(19 * 60 + 20) })
+    },
+    'underway': {
+      title: 'Van on the road, 14 minutes out',
+      payload: Object.assign({ state: 'underway', countdownTo: iso(14), progress: 0.62 }, order, { day: today, window: '16:11–16:31', windowEnd: iso(34) })
     },
     'arriving': {
       title: 'Arriving, inside the window',

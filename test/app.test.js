@@ -85,6 +85,8 @@ async function boot(picnic) {
   app.utils.getOrderStatus = async () => JSON.stringify(picnic.summary());
   app.utils.getCart = async () => JSON.stringify(picnic.cart());
   app.utils.getDelivery = async () => JSON.stringify({});
+  // no van assigned yet: Picnic answers with nothing
+  app.utils.getDeliveryPosition = async () => "";
 
   // signed in, and the poll the app starts with
   settings["x-picnic-auth"] = "token";

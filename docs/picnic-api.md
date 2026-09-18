@@ -69,6 +69,29 @@ nothing is running.
 | `orders[].total_deposit`, `orders[].deposit_breakdown[]` | deposit paid, `{ type: BAG\|DEFAULT, value, count }` |
 | `returned_containers[]` | `{ type, localized_name, quantity, price }`, filled in once the hub has counted what went back. **Unconfirmed**: whether `price` is per unit (as the app assumes) or per line |
 
+## Where the van is
+
+**`GET /deliveries/{id}/position`**: the van on its route. Not seen live yet;
+the shape is the one the typed Go client and Home Assistant model, and Home
+Assistant notes it is "only available shortly before the actual delivery" and
+answers with an **empty body** until then, which `lib/positionresponse.js`
+reads as "nothing to say yet" rather than as a failure.
+
+| Field | Meaning |
+| --- | --- |
+| `scenario_in_progress` | `true` while the route is being driven: the van is on its way. This, not `eta2`, is what makes a delivery "onderweg"; `eta2` is the twenty minute window Picnic announces the day before (seen at 14:00 for a slot the next morning) |
+| `eta_window.start`, `.end` | the live window, about twenty minutes wide, refined as the van drives; beats `eta2` while the van is on the road |
+| `eta` | the moment of arrival, in milliseconds since the epoch |
+| `scenario_ts` | the moment along the route the van is at, in milliseconds; a key into `/scenario` |
+| `query_interval` | how often Picnic's app asks again, in milliseconds (10000 in the example seen) |
+
+**`GET /deliveries/{id}/scenario`**: the planned route as `{ ts, lat, lng }`
+points, plus the driver's name and photo and the destination address. Not
+used: it is personal data with nothing on it a dashboard needs.
+
+The app asks for the position from three hours before the announced window,
+at most once a minute, and only while a dashboard shows the widget.
+
 ## Cart
 
 **`GET /cart`**

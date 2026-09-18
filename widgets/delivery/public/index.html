@@ -468,9 +468,13 @@
     // and next to the mark alone on a half width one.
     var STATES = {
       // an order in hand is good news rather than something to act on, so it
-      // is green; red is kept for the cart that still has to be ordered
-      'ordered': { tone: 'calm', icon: 'scheduled', status: 'ordered' },
-      'announced': { tone: 'calm', icon: 'truck', status: 'announced' },
+      // is green; red is kept for the cart that still has to be ordered.
+      // A pending order is one until the van leaves, however precise the
+      // window Picnic has announced for it; Picnic's own word for it is
+      // long, so it has a short form for where it does not fit.
+      'ordered': { tone: 'calm', icon: 'scheduled', status: 'ordered', short: 'ordered-short' },
+      'announced': { tone: 'calm', icon: 'scheduled', status: 'ordered', short: 'ordered-short' },
+      'underway': { tone: 'calm', icon: 'truck', status: 'underway' },
       'arriving': { tone: 'calm', icon: 'truck', status: 'arriving' },
       'overdue': { tone: 'warn', icon: 'clock', status: 'overdue' },
       'delivered': { tone: 'good', icon: 'check', status: 'delivered' },
@@ -691,7 +695,11 @@
         tone: look.tone,
         icon: look.icon,
         status: look.status ? label(look.status) : '',
+        // what the name and the amount fall back to where the name does not
+        // fit next to the amount: the count goes first, then the name's length
+        statusShort: look.short ? label(look.short) : '',
         meta: '',
+        metaShort: '',
         kind: 'message',
         // what the number is, above it
         caption: '',
@@ -712,7 +720,9 @@
       switch (data['state']) {
         case 'ordered':
         case 'announced':
+        case 'underway':
           shown.meta = order;
+          shown.metaShort = price;
           if (data['countdownTo']) {
             var left = remaining(data['countdownTo']);
             shown.kind = left.kind;
@@ -735,6 +745,7 @@
         case 'arriving':
         case 'overdue':
           shown.meta = order;
+          shown.metaShort = price;
           shown.headline = label('now');
           shown.when = [data['day'], data['window']].filter(Boolean).join(' ');
           shown.progress = data['progress'];
@@ -883,6 +894,26 @@
       element('note-short').textContent = said ? (said.short || said.first) : '';
       element('note').dataset.tone = said && said.tone ? said.tone : '';
       element('note').hidden = !said;
+
+      fit(shown);
+    }
+
+    // The name of the state and the amount share the top line with the mark,
+    // and not every name fits next to every amount. Measured rather than
+    // guessed, since the width of a tile and the width of a word are both
+    // only known here: a name that comes out cut off gives up the product
+    // count next to it first, and its own length after that.
+    function fit(shown) {
+      var name = element('status');
+      if (!(name.clientWidth > 0)) return;
+      if (name.scrollWidth <= name.clientWidth) return;
+
+      if (shown.metaShort && shown.metaShort != shown.meta) {
+        element('meta').textContent = shown.metaShort;
+        if (name.scrollWidth <= name.clientWidth) return;
+      }
+
+      if (shown.statusShort && shown.statusShort != shown.status) name.textContent = shown.statusShort;
     }
   </script>
 </body>

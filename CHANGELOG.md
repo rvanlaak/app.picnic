@@ -38,6 +38,7 @@ each release is what Homey shows in the app store, and lives in `.homeychangelog
 - With nothing planned, and with a cart that has no slot, the widget says when something could be delivered: "Bezorgmomenten morgen: 3 van 12 vrij" and "Eerste om 08:30", counted from the two weeks of slots Picnic lists with the cart. A slot that closed unordered asks for a new one instead of only saying it is too late
 - The names of the states are short enough to sit between the mark and the amount: "Wordt bezorgd" became "Komt eraan"
 - `make gallery` shows every state of the widget in a browser, in both widths and both themes, without a Homey, and the states it shows are the ones the tests put through the widget. `make previews` redraws the App Store preview images, which now carry Picnic's mark
+- A delivery is "Onderweg" only once the van is on the road, and the bar only fills from then. Picnic announces its twenty minute window the day before, and the widget took that for the van leaving: it said "Onderweg" with a bar for a delivery the next morning. Until the van leaves an order is a pending one, "Lopende bestelling" as Picnic calls it, counting down to its window without a bar; from three hours before the window, while a dashboard is looking, the app asks Picnic where the van is, and once the route is being driven the countdown is to Picnic's live window, which moves with the van. Where "Lopende bestelling" does not fit next to the amount it makes room by dropping the product count, and on a half width tile it is "Besteld"
 
 ## 3.7.0
 

@@ -41,8 +41,7 @@
             "stale-since": "Last updated __t__",
             "empty": "Nothing planned",
             "empty-cart": "Your cart is empty",
-            "ordered": "Ordered",
-            "announced": "On its way",
+            "ordered": "Pending order",
             "arriving": "Almost there",
             "overdue": "Running late",
             "delivered": "Delivered",
@@ -86,7 +85,9 @@
             "late-by": "__n__ minutes past the announced window",
             "late-by-one": "1 minute past the announced window",
             "late-short": "__n__ min late",
-            "delivered-caption": "__d__ at"
+            "delivered-caption": "__d__ at",
+            "ordered-short": "Ordered",
+            "underway": "On its way"
         }
     }
 }

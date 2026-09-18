@@ -41,8 +41,7 @@
             "stale-since": "Laatst bijgewerkt __t__",
             "empty": "Niets gepland",
             "empty-cart": "Je mandje is leeg",
-            "ordered": "Besteld",
-            "announced": "Onderweg",
+            "ordered": "Lopende bestelling",
             "arriving": "Komt eraan",
             "overdue": "Vertraagd",
             "delivered": "Bezorgd",
@@ -86,7 +85,9 @@
             "late-by": "__n__ minuten na het aangekondigde moment",
             "late-by-one": "1 minuut na het aangekondigde moment",
             "late-short": "__n__ min te laat",
-            "delivered-caption": "__d__ om"
+            "delivered-caption": "__d__ om",
+            "ordered-short": "Besteld",
+            "underway": "Onderweg"
         }
     }
 }

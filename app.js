@@ -7,6 +7,14 @@ const utils = require('./lib/utils.js');
 const { deriveOrderEvent, windowTriggersStillApply, deriveOrderFacts } = require('./lib/orderevent.js');
 const { deriveDeliveryState, orderCheckDue } = require('./lib/deliverystate.js');
 const { parseCart } = require('./lib/cartresponse.js');
+const { parsePosition } = require('./lib/positionresponse.js');
+
+// How long before its window a delivery is watched for the van leaving, and
+// how often while it is. Picnic's own app asks every ten seconds once the van
+// is on the road; a dashboard read in passing does not need to know that
+// closely, and asking every minute keeps the app a polite guest.
+const POSITION_LOOKOUT = 3 * 60 * 60 * 1000;
+const POSITION_MAX_AGE = 60 * 1000;
 const { parseDelivery } = require('./lib/deliveryresponse.js');
 const cutoff = require('./lib/cutoff.js');
 const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
@@ -425,7 +433,9 @@ class Picnic extends Homey.App {
 			"orderStatus": this.homey.settings.get("order_status"),
 			"etaStart": this.homey.settings.get("delivery_eta_start"),
 			"etaEnd": this.homey.settings.get("delivery_eta_end"),
-			"announcedAt": this.homey.settings.get("delivery_announced_at"),
+			// where the van is, as far as Picnic has said so for this delivery
+			"position": this._position && this._position["deliveryId"] == deliveryId ? this._position : null,
+			"underwayAt": this.homey.settings.get("delivery_underway_at"),
 			"deliveredAt": this.homey.settings.get("delivery_time"),
 			// what Picnic said, and otherwise what its own rule works out to: an
 			// order can be added to until 13:00 the day before a delivery that
@@ -452,8 +462,17 @@ class Picnic extends Homey.App {
 		// delivered: how many products it holds, what it costs once something
 		// has been added to it, and once delivered, when it came and what came
 		// back in deposit. The summary the poll reads carries none of that.
-		const orderInHand = ["ordered", "announced", "arriving", "overdue", "delivered"].indexOf(state["state"]) != -1;
+		const orderInHand = ["ordered", "announced", "underway", "arriving", "overdue", "delivered"].indexOf(state["state"]) != -1;
 		if (orderInHand && deliveryId) this._refreshDeliveryWhenStale(deliveryId);
+
+		// The window Picnic announces is a plan, made the day before; the van
+		// leaving is what makes a delivery "on its way", and Picnic only says
+		// where the van is once there is one. From a few hours before the
+		// window, while a dashboard is looking, it is asked.
+		const windowStart = Date.parse(state["etaStart"]);
+		const vanDue = ["announced", "underway", "arriving", "overdue"].indexOf(state["state"]) != -1
+			&& !isNaN(windowStart) && windowStart - now.getTime() <= POSITION_LOOKOUT;
+		if (vanDue && deliveryId) this._refreshPositionWhenStale(deliveryId);
 
 		// Between deliveries the poll runs every six hours, which is how an
 		// order placed in the Picnic app went unnoticed until long after its
@@ -595,7 +614,7 @@ class Picnic extends Homey.App {
 		const labels = {};
 
 		["signed-out", "signed-out-detail", "stale", "stale-since", "empty", "empty-cart",
-			"ordered", "announced", "arriving", "overdue", "delivered", "delivered-caption",
+			"ordered", "ordered-short", "underway", "arriving", "overdue", "delivered", "delivered-caption",
 			"now", "delivery-in", "today", "day", "days", "hour", "hours", "minute", "minutes",
 			"cart", "item", "items", "minimum", "minimum-caption", "pick-slot", "slot-closed",
 			"order-before", "order-within", "order-before-short", "order-within-short",
@@ -627,6 +646,49 @@ class Picnic extends Homey.App {
 		// Kept when the delivery drops out of the summary, which is exactly
 		// when it is needed: that is how a delivery ends.
 		if (facts["deliveryId"]) this.homey.settings.set("delivery_id", facts["deliveryId"]);
+	}
+
+	// Where the van is, as far as the widget is concerned: in memory like the
+	// cart, and for the same reason. The moment the van was first seen on the
+	// road is the one thing written down, so the bar that fills from it
+	// survives a restart mid-route.
+	_refreshPositionWhenStale(deliveryId) {
+		if (this._positionRefreshing === true) return;
+		if (this._position && this._position["deliveryId"] == deliveryId && Date.now() - this._position["refreshedAt"] < POSITION_MAX_AGE) return;
+		if (!this.homey.settings.get("x-picnic-auth") || this._picnicOutOfReach()) return;
+
+		this._positionRefreshing = true;
+
+		this.utils.getDeliveryPosition(deliveryId)
+			.then(body => {
+				this._logResponse("GET /api/15/deliveries/{id}/position", body);
+
+				// nothing said yet is a van that has not left: not a failure
+				const position = parsePosition(body);
+				const before = this._position && this._position["deliveryId"] == deliveryId ? this._position["inProgress"] : false;
+
+				this._position = Object.assign({ "deliveryId": deliveryId, "refreshedAt": Date.now(), "inProgress": false }, position || {});
+
+				if (this._position["inProgress"] && !this.homey.settings.get("delivery_underway_at")) {
+					this.homey.settings.set("delivery_underway_at", new Date().toISOString());
+				}
+
+				if (this._position["inProgress"] && !before) {
+					this.info("Picnic says the van is on its way, expected between " + this._position["etaStart"] + " and " + this._position["etaEnd"]);
+				}
+
+				return this._publishDeliveryState();
+			})
+			.catch(async error => {
+				if (hasCode(error, SECOND_FACTOR_REQUIRED)) return await this._signInRequired();
+
+				// the widget goes on showing the pending order, which is true as
+				// far as the app knows
+				this.error(error);
+			})
+			.finally(() => {
+				this._positionRefreshing = false;
+			});
 	}
 
 	// The cart, as far as the widget is concerned. Kept in memory rather than
@@ -788,10 +850,13 @@ class Picnic extends Homey.App {
 							this.homey.settings.set("delivery_eta_end", orderEvent["eta1_end"])
 							this.homey.settings.set("delivery_date", eta_date)
 
-							// a new order has nothing announced and nothing delivered yet,
-							// and what the previous one left behind is about that one
+							// a new order has nothing announced, no van on the road and
+							// nothing delivered yet, and what the previous one left
+							// behind is about that one
 							this.homey.settings.unset("delivery_announced_at")
+							this.homey.settings.unset("delivery_underway_at")
 							this.homey.settings.unset("delivery_time")
+							this._position = null
 
 							this.debug("Updating poll interval to " + ORDERED_POLL_INTERVAL / 1000 / 60 + " minutes");
 							this.homey.app.changeInterval(ORDERED_POLL_INTERVAL);
@@ -813,9 +878,8 @@ class Picnic extends Homey.App {
 							this.homey.settings.set("delivery_eta_end", orderEvent["eta2_end"])
 							this.homey.settings.set("delivery_date", tokens["eta_date"])
 
-							// the dashboard widget fills its bar between this moment and the
-							// start of the window, which is the stretch of time a delivery
-							// spends drawing near
+							// when Picnic said so, for the record; the widget's bar fills
+							// from the moment the van leaves, which is later
 							this.homey.settings.set("delivery_announced_at", new Date().toISOString())
 
 							// takes care of the poll interval for this window as well
@@ -848,6 +912,10 @@ class Picnic extends Homey.App {
 							this.debug("Order changed to groceries_delivered, firing trigger")
 
 							this.pruneDeliverySchedule(orderEvent["delivery_time"])
+
+							// the van has been and gone
+							this.homey.settings.unset("delivery_underway_at")
+							this._position = null
 
 							// the delivery this trigger is about, so a flow does not
 							// have to read the global tokens to know what arrived

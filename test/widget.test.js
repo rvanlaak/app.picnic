@@ -38,6 +38,8 @@ function harness(settings) {
       dataset: {},
       style: {},
       attributes: {},
+      clientWidth: 0,
+      scrollWidth: 0,
       setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener() { }
     };
@@ -72,6 +74,7 @@ function harness(settings) {
   return {
     nodes,
     adopt: context.adopt,
+    render: context.render,
     // the caption above the number reads as part of it: "Delivery in" "15 min"
     headline: () => [nodes.caption, nodes.value, nodes.unit].filter(node => !node.hidden && node.textContent).map(node => node.textContent).join(' '),
     detail: () => [nodes.when.textContent, nodes.what.textContent].filter(Boolean).join(' · ')
@@ -92,10 +95,11 @@ function payload(stored, extra) {
     day: derived.etaStart || derived.deliveredAt ? 'today' : '',
     window: derived.etaStart ? '16:11–16:31' : '',
     windowEnd: derived.etaEnd,
+    position: stored.position || null,
     deliveredTime: derived.deliveredAt ? '16:18' : '',
     cutOffAt: derived.cutOffAt,
     cutOffLabel: derived.cutOffAt ? 'today 23:00' : '',
-    price: ['ordered', 'announced', 'arriving', 'overdue', 'delivered'].indexOf(derived.state) != -1 ? 52.5 : null,
+    price: ['ordered', 'announced', 'underway', 'arriving', 'overdue', 'delivered'].indexOf(derived.state) != -1 ? 52.5 : null,
     deposit: derived.delivery ? {
       returned: derived.delivery.depositReturned,
       containers: derived.delivery.returned.map(container => ({ name: container.name, quantity: container.quantity }))
@@ -129,6 +133,9 @@ const WINDOW = { etaStart: '2026-07-28T16:11:00.000+02:00', etaEnd: '2026-07-28T
 const NEXT = { windowStart: '2026-07-29T08:30:00.000+02:00', windowEnd: '2026-07-29T09:30:00.000+02:00', available: 3, total: 12 };
 const ANNOUNCED = Object.assign({ orderStatus: 'delivery_announced', announcedAt: '2026-07-28T15:41:00.000+02:00' }, WINDOW);
 
+// and the van on the road towards that window, since 15:41
+const UNDERWAY = Object.assign({ position: { inProgress: true, etaStart: WINDOW.etaStart, etaEnd: WINDOW.etaEnd }, underwayAt: '2026-07-28T15:41:00.000+02:00' }, ANNOUNCED);
+
 function cart(extra) {
   return Object.assign({
     totalPrice: 22.03,
@@ -138,10 +145,10 @@ function cart(extra) {
   }, extra);
 }
 
-test('an announced delivery counts the minutes down and fills the bar', () => {
+test('a van on the road counts the minutes down and fills the bar', () => {
   const { nodes, adopt, headline, detail } = harness();
 
-  adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
+  adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, UNDERWAY)));
 
   assert.strictEqual(nodes.tile.dataset.tone, 'calm');
   assert.strictEqual(nodes.badge.dataset.icon, 'truck');
@@ -163,7 +170,7 @@ test('an order days out counts in days and shows no bar', () => {
     now: '2026-07-28T16:00:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.status.textContent, 'Ordered');
+  assert.strictEqual(nodes.status.textContent, 'Pending order');
   assert.strictEqual(nodes.tile.dataset.tone, 'calm');
   assert.strictEqual(nodes.badge.dataset.icon, 'scheduled');
   assert.strictEqual(headline(), 'Delivery in 2 days');
@@ -520,7 +527,7 @@ test('every word the widget asks for is one the app hands over', () => {
   const asked = new Set();
 
   for (const call of script.matchAll(/\b(?:label|text)\('([a-z-]+)'/g)) asked.add(call[1]);
-  for (const entry of script.matchAll(/status: '([a-z-]+)'/g)) asked.add(entry[1]);
+  for (const entry of script.matchAll(/(?:status|short): '([a-z-]+)'/g)) asked.add(entry[1]);
 
   asked.forEach(key => {
     assert.ok(handed.includes('"' + key + '"'), 'the widget asks for "' + key + '" but the app does not hand it over');
@@ -540,7 +547,7 @@ test('a placed order with twenty minutes left to add to says so, whatever the de
     now: '2026-09-18T12:40:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.status.textContent, 'Ordered');
+  assert.strictEqual(nodes.status.textContent, 'Pending order');
   assert.strictEqual(headline(), 'Delivery in 20 hours');
   assert.strictEqual(noteOf(nodes), '20 minutes left to add to it');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
@@ -662,7 +669,7 @@ test('nothing planned says when something could be, on a line of its own', () =>
 
 test('the state\'s icon sits in front of its name, and on its own where there is no name', () => {
   const named = harness();
-  named.adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
+  named.adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, UNDERWAY)));
 
   assert.strictEqual(named.nodes['status-pill'].hidden, false);
   assert.strictEqual(named.nodes['status-icon'].attributes.href, '#i-truck');
@@ -721,4 +728,42 @@ test('a deadline on another day carries that day as its unit, and hands it to th
   assert.strictEqual(headline(), 'Order within 40 min');
   assert.strictEqual(nodes.unit.dataset.unit, '');
   assert.strictEqual(nodes.caption.dataset.day, undefined);
+});
+
+test('an announced window is a pending order without a bar, until the van leaves', () => {
+  const { nodes, adopt, headline } = harness();
+
+  adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
+
+  assert.strictEqual(nodes.status.textContent, 'Pending order');
+  assert.strictEqual(nodes['status-pill'].dataset.icon, 'scheduled');
+  assert.strictEqual(headline(), 'Delivery in 15 min');
+  assert.strictEqual(nodes.track.hidden, true);
+
+  adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, UNDERWAY)));
+
+  assert.strictEqual(nodes.status.textContent, 'On its way');
+  assert.strictEqual(nodes['status-pill'].dataset.icon, 'truck');
+  assert.strictEqual(nodes.track.hidden, false);
+});
+
+test('a name that does not fit gives up the product count first, and then its length', () => {
+  const { nodes, adopt, render } = harness();
+  const order = payload({ orderStatus: 'groceries_ordered', etaStart: '2026-07-30T16:00:00.000+02:00', etaEnd: '2026-07-30T17:00:00.000+02:00', now: '2026-07-28T16:00:00.000+02:00' }, { orderCount: 29, price: 53.43 });
+
+  adopt(order);
+  assert.strictEqual(nodes.status.textContent, 'Pending order');
+  assert.strictEqual(nodes.meta.textContent, '29 products · €53.43');
+
+  // the name is wider than its box while the count is next to it
+  nodes.status.clientWidth = 100;
+  Object.defineProperty(nodes.status, 'scrollWidth', { get: () => nodes.meta.textContent.indexOf('products') != -1 ? 131 : 100, configurable: true });
+  render();
+  assert.strictEqual(nodes.meta.textContent, '€53.43');
+  assert.strictEqual(nodes.status.textContent, 'Pending order');
+
+  // and wider than its box whatever is next to it: a half width tile
+  Object.defineProperty(nodes.status, 'scrollWidth', { get: () => 131, configurable: true });
+  render();
+  assert.strictEqual(nodes.status.textContent, 'Ordered');
 });

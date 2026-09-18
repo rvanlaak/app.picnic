@@ -32,13 +32,16 @@ Polling the status of your Picnic account and providing trigger flowcards based 
 A "Delivery" widget for Homey Dashboards, which shows the one thing a screen on
 the wall is good at telling you: when the groceries turn up.
 
-- An order that has been placed shows the day and the slot Picnic will deliver
-  in, counting down towards it
-- Once Picnic announces the delivery moment, the countdown is to that window
-  instead, with a bar that fills between the announcement and the delivery
+- An order that has been placed is a pending order, "Lopende bestelling" as
+  Picnic calls it: it shows the day and the slot Picnic will deliver in,
+  counting down towards it, and once Picnic announces the twenty minute
+  delivery window, towards that
+- Once the van is on the road, and only then, it says the groceries are on
+  their way, with a bar that fills from the moment the van left until Picnic's
+  live window, which is what the countdown is to by then
 - During the window it says the groceries are arriving, after it that Picnic is
-  running late, and afterwards the time they were delivered. Four hours later
-  the delivery makes way for whatever is in your cart by then
+  running late and by how much, and afterwards the time they were delivered.
+  Four hours later the delivery makes way for whatever is in your cart by then
 - Once Picnic has counted what went back with the driver, the delivered order
   says what came back in deposit, and in what
 - The amount of the order is shown alongside it, which can be turned off in the
