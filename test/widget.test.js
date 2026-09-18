@@ -175,7 +175,7 @@ test('a delivery that is late says so in its own colour', () => {
 test('delivered groceries show the moment they arrived and what they cost', () => {
   const { nodes, adopt, headline, detail } = harness();
 
-  adopt(payload({ orderStatus: 'groceries_delivered', deliveredAt: '2026-07-28T16:18:00.000+02:00', now: '2026-07-28T16:40:00.000+02:00' }));
+  adopt(payload(Object.assign({ orderStatus: 'groceries_delivered', deliveredAt: '2026-07-28T16:18:00.000+02:00', now: '2026-07-28T16:40:00.000+02:00' }, WINDOW)));
 
   assert.strictEqual(nodes.status.textContent, 'Delivered');
   assert.strictEqual(nodes.tile.dataset.tone, 'good');
@@ -188,12 +188,12 @@ test('delivered groceries show the moment they arrived and what they cost', () =
 test('deposit that came back is shown with the delivery', () => {
   const { nodes, adopt, detail } = harness();
 
-  adopt(payload({
+  adopt(payload(Object.assign({
     orderStatus: 'groceries_delivered',
     deliveredAt: '2026-07-28T16:18:00.000+02:00',
-    delivery: { totalPrice: 22.03, depositReturned: 4.8, returned: [{ name: 'Bottles', quantity: 6, amount: 0.9 }, { name: 'Crates', quantity: 1, amount: 3.9 }] },
+    delivery: { deliveredAt: '2026-07-28T16:18:00.000+02:00', totalPrice: 22.03, depositReturned: 4.8, returned: [{ name: 'Bottles', quantity: 6, amount: 0.9 }, { name: 'Crates', quantity: 1, amount: 3.9 }] },
     now: '2026-07-28T16:40:00.000+02:00'
-  }));
+  }, WINDOW)));
 
   assert.strictEqual(detail(), 'today · 6× Bottles, 1× Crates');
   assert.strictEqual(nodes.note.textContent, '+€4.80 deposit back');
@@ -203,7 +203,7 @@ test('deposit that came back is shown with the delivery', () => {
 test('four hours after the delivery the widget has moved on', () => {
   const { nodes, adopt, headline, detail } = harness();
 
-  adopt(payload({ orderStatus: 'groceries_delivered', deliveredAt: '2026-07-28T12:00:00.000+02:00', now: '2026-07-28T16:01:00.000+02:00' }, { cartKnown: true }));
+  adopt(payload(Object.assign({ orderStatus: 'groceries_delivered', deliveredAt: '2026-07-28T12:00:00.000+02:00', now: '2026-07-28T16:01:00.000+02:00' }, WINDOW), { cartKnown: true }));
 
   assert.strictEqual(nodes.status.textContent, '');
   assert.strictEqual(headline(), 'Nothing planned');

@@ -332,3 +332,30 @@ test('the cart only rides along with an order while that order can still be adde
   assert.strictEqual(open.cart.totalPrice, 22.03);
   assert.strictEqual(closed.cart, null);
 });
+
+test('a delivery the app cannot place in time is not shown as one', () => {
+  // what a sign-in on an account with nothing running used to leave behind:
+  // a delivered status stamped with the moment the app first looked
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    etaStart: null,
+    etaEnd: null,
+    deliveredAt: "2026-07-28T08:46:00.000+02:00",
+    now: "2026-07-28T09:00:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "empty");
+});
+
+test('a delivery Picnic itself put a moment on is shown without a window', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    etaStart: null,
+    etaEnd: null,
+    deliveredAt: "2026-07-28T08:46:00.000+02:00",
+    delivery: { deliveredAt: "2026-07-28T08:46:00.000+02:00", totalPrice: 22.03, depositReturned: null, returned: [] },
+    now: "2026-07-28T09:00:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "delivered");
+});
