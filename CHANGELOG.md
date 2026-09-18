@@ -13,6 +13,7 @@ each release is what Homey shows in the app store, and lives in `.homeychangelog
 - With nothing ordered at all, the widget shows what is in the cart and how many products that is, so it has something to say on the days between deliveries. If the cart is below the minimum order value it says how much is missing
 - Tapping the widget opens Picnic, with a short buzz to say the tap arrived. Both the cart and the tap can be turned off in the widget's settings
 - The cart is only fetched while a dashboard is actually showing the widget, at most once every five minutes, and only while nothing is ordered
+- Picnic refusing to hand out an order until a 2FA code is verified (HTTP 403, `TWO_FACTOR_AUTHENTICATION_REQUIRED`) is now recognised as a sign-in being needed. The app used to log it as a failed poll every hour and carry on with what it knew from before, and the settings page called the login "NOT OK". Now Homey notifies you, the settings page asks for a sign-in and the widget says so
 - The app needs Homey firmware v12.1.0 or newer from this release on. That is what an app containing a widget is required to ask for, and it is the version Homey Dashboards themselves need
 
 ## 3.7.0

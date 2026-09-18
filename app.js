@@ -11,6 +11,7 @@ const cutoff = require('./lib/cutoff.js');
 const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
 const twofactor = require('./lib/twofactor.js');
 const { describeError, describeStack, describeBody, toError } = require('./lib/errors.js');
+const { refusal, hasCode, SECOND_FACTOR_REQUIRED } = require('./lib/refusal.js');
 const eta = require('./lib/eta.js');
 
 var http = require("https");
@@ -539,7 +540,9 @@ class Picnic extends Homey.App {
 
 				return this._publishDeliveryState();
 			})
-			.catch(error => {
+			.catch(async error => {
+				if (hasCode(error, SECOND_FACTOR_REQUIRED)) return await this._signInRequired();
+
 				// the widget falls back to saying nothing is planned, which is
 				// true as far as the app knows, so this is not worth a crash
 				this._logProblem("Retrieving the cart", describeError(error));
@@ -724,6 +727,15 @@ class Picnic extends Homey.App {
 	// Everything that goes wrong while polling ends up here. It used to become
 	// "an unexpected error occured" on a promise nobody awaited, and crash.
 	async _pollFailed(error) {
+		// Checked before a rejected token: logging in again would only hand out
+		// another token Picnic refuses for the same reason, and a login that
+		// succeeds polls straight away, so the two would chase each other.
+		if (hasCode(error, SECOND_FACTOR_REQUIRED)) {
+			this._logProblem("Polling Picnic", describeError(error));
+			await this._signInRequired();
+			return;
+		}
+
 		if (this._isUnauthorized(error)) {
 			const waiting = this._waitingOnTheUser();
 
@@ -1004,6 +1016,10 @@ class Picnic extends Homey.App {
 		this.homey.settings.set("2fa_signin_required", true);
 
 		this.info("Picnic wants a 2FA code, which the app does not request by itself: waiting for a sign-in on the settings page")
+
+		// an open dashboard would otherwise go on showing the last order it
+		// was told about as if it were still being followed
+		await this._publishDeliveryState();
 
 		// The poll stops at this state, so it will not come back through here:
 		// this is the one chance to say so, and saying it twice would take a
@@ -1320,21 +1336,34 @@ class Picnic extends Homey.App {
 
 		return new Promise((resolve) => {
 			const req = http.request(options, (res) => {
-				// the body is not used, reading it releases the socket
-				res.resume();
-
 				if (res.statusCode >= 200 && res.statusCode < 300) {
+					// the body is not used, reading it releases the socket
+					res.resume();
 					this.info("Authentication check: Picnic accepted the token on " + options.path + " (HTTP " + res.statusCode + ")")
-					resolve("OK");
+					return resolve("OK");
 				}
-				else if (res.statusCode == 401 || res.statusCode == 403) {
-					this.info("Authentication check: Picnic refused the token on " + options.path + " (HTTP " + res.statusCode + ")")
-					resolve("NOT OK");
-				}
-				else {
-					this.info("Authentication check: unexpected answer from Picnic on " + options.path + " (HTTP " + res.statusCode + ")")
-					resolve("UNKNOWN (HTTP " + res.statusCode + ")");
-				}
+
+				// a refusal is read, because it is the body that tells a token
+				// Picnic rejects apart from one waiting on its second factor
+				let body = '';
+				res.setEncoding('utf8');
+				res.on('data', (chunk) => { body += chunk; });
+				res.on('end', () => {
+					if (hasCode(refusal(res.statusCode, body, "the cart"), SECOND_FACTOR_REQUIRED)) {
+						// the credentials are fine, a code is what is missing, and
+						// saving the login on this page is what has Picnic send one
+						this.info("Authentication check: Picnic wants a 2FA code before it accepts the token on " + options.path + " (HTTP " + res.statusCode + ")")
+						resolve("SIGN IN NEEDED");
+					}
+					else if (res.statusCode == 401 || res.statusCode == 403) {
+						this.info("Authentication check: Picnic refused the token on " + options.path + " (HTTP " + res.statusCode + ")")
+						resolve("NOT OK");
+					}
+					else {
+						this.info("Authentication check: unexpected answer from Picnic on " + options.path + " (HTTP " + res.statusCode + ")")
+						resolve("UNKNOWN (HTTP " + res.statusCode + ")");
+					}
+				});
 			});
 
 			req.on('timeout', () => {
