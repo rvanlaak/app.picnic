@@ -463,6 +463,7 @@ class Picnic extends Homey.App {
 
 		const cart = state["cart"];
 		const slot = cart && cart["slot"];
+		const next = state["nextSlots"];
 		const delivery = state["delivery"];
 		const details = this._delivery && this._delivery["deliveryId"] == deliveryId ? this._delivery : null;
 		const orderPrice = this.homey.settings.get("order_price");
@@ -477,6 +478,8 @@ class Picnic extends Homey.App {
 			"progress": state["progress"],
 			"day": this.formatEtaDay(state["etaStart"] || state["deliveredAt"], now),
 			"window": this._formatWindow(state["etaStart"], state["etaEnd"]),
+			// the end of the window, for saying how far past it a late delivery is
+			"windowEnd": state["etaEnd"],
 			"deliveredTime": this.formatEtaTime(state["deliveredAt"]),
 			"cutOffAt": state["cutOffAt"],
 			"cutOffLabel": this._formatMoment(state["cutOffAt"], now),
@@ -508,6 +511,14 @@ class Picnic extends Homey.App {
 				} : null
 			} : null,
 			"cartKnown": state["cartKnown"],
+			// the next day something can be delivered on: how many of its slots
+			// are still open, and when the first of those is
+			"nextSlots": next ? {
+				"day": this.formatEtaDay(next["windowStart"], now),
+				"time": this.formatEtaTime(next["windowStart"]),
+				"available": next["available"],
+				"total": next["total"]
+			} : null,
 			"checkedLabel": this._formatMoment(state["checkedAt"], now),
 			// amounts are written the way Homey's language writes them, not the
 			// way the tablet showing the dashboard happens to be set up
@@ -584,12 +595,15 @@ class Picnic extends Homey.App {
 		const labels = {};
 
 		["signed-out", "signed-out-detail", "stale", "stale-since", "empty", "empty-cart",
-			"ordered", "announced", "arriving", "overdue", "delivered",
-			"now", "delivery-in", "delivered-at", "today", "day", "days", "hour", "hours", "minute", "minutes",
-			"cart", "item", "items", "minimum", "no-slot", "slot-closed", "order-before", "order-within",
+			"ordered", "announced", "arriving", "overdue", "delivered", "delivered-caption",
+			"now", "delivery-in", "today", "day", "days", "hour", "hours", "minute", "minutes",
+			"cart", "item", "items", "minimum", "minimum-caption", "pick-slot", "slot-closed",
+			"order-before", "order-within", "order-before-short", "order-within-short",
 			"cut-off-at", "cut-off-in", "cut-off-in-one", "cut-off-in-short",
 			"to-order-item", "to-order-items", "to-order-at", "to-order-in", "to-order-in-one",
 			"to-order-short-at", "to-order-short-in", "cart-amount",
+			"next-slots", "next-slots-first", "next-slots-short",
+			"late-by", "late-by-one", "late-short",
 			"deposit-returned", "deposit-pending"].forEach(key => {
 				labels[key] = this.homey.__("widget.delivery." + key);
 			});

@@ -50,14 +50,22 @@ the wall is good at telling you: when the groceries turn up.
 - Anything in your cart while an order is open still has to be added to that
   order, so the widget says how much that is and how long is left to do it
 - With nothing ordered at all, the widget shows what is in your cart and how
-  many products that is, and how much is missing when that is below the
-  minimum order value
-- It says your cart is not ordered yet, and which delivery moment it is set
-  to, or that none has been picked: until you pick one nothing is held for
-  you. Once one is picked, the deadline to order by is what the widget leads
-  with, counted down in minutes over the last hour
+  many products that is, and leads with how much is missing when that is
+  below the minimum order value, since nothing can be ordered until it is
+- It says your cart is still to order, and which delivery moment it is set
+  to, or asks you to pick one: until you do, nothing is held for you. Once one
+  is picked, the deadline to order by is what the widget leads with, counted
+  down in minutes over the last hour
+- With nothing planned, and with a cart that has no slot, it says when
+  something could be delivered: how many of the next day's slots are still
+  open, and when the first of those is
+- A late delivery says how many minutes late it is
 - When the app has not been able to reach Picnic in over a day, the widget says
   so and when it last heard, rather than passing off what it knew as news
+
+Picnic's mark sits at the top left of every tile, the state's icon and name
+next to it, and each colour means one thing: red is Picnic and a cart still to
+order, ochre a deadline within the hour, green an order in hand or delivered.
 
 Nothing on the widget is ever counted down in seconds: a dashboard is read in
 passing, and the minute it arrives in is as precise as that reading gets.

@@ -12,9 +12,9 @@
      * layout rather than merely change it.
      *
      * One layout for every state, so a glance lands in the same place whatever
-     * the widget is saying: what this is about at the top, the one thing worth
-     * reading large at the bottom, with its detail and what to do about it
-     * underneath.
+     * the widget is saying: whose widget this is and what state it is in at
+     * the top, the one thing worth reading large at the bottom, with its
+     * detail and what to do about it underneath.
      */
     body {
       margin: 0;
@@ -29,11 +29,15 @@
       flex-direction: column;
       font-variant-numeric: tabular-nums;
 
-      /* Picnic's own badge colours: its red, the green of its "Family" badge,
-         the lighter green of its "Naar de winkel" button for an order that is
-         in hand, and the yellow of its "Actie" one. Each comes as the fill of a badge,
-         the text on that fill, and an ink for text and icons on the widget
-         itself, where the fill would not always be readable. */
+      /* Picnic's own colours: its red, the green of its "Family" badge, the
+         lighter green of its "Naar de winkel" button for an order that is in
+         hand, and the yellow of its "Actie" one. Each comes as a fill, the
+         text on that fill, and an ink for text and icons on the widget
+         itself, where the fill would not always be readable.
+
+         Each colour means one thing: red is Picnic, and a cart that still
+         has to be ordered; the yellow's ink is a deadline within the hour;
+         green is an order in hand or delivered; grey is nothing at all. */
       --brand: #e40613;
       --brand-on: #ffffff;
       --brand-ink: #e40613;
@@ -48,24 +52,30 @@
       --warn-ink: #8a6a00;
       --muted: var(--homey-text-color-light, #8a8a8a);
 
-      /* the one colour a state gives the widget, see STATES below */
+      /* the one colour a state gives the widget, see STATES below, and how
+         much of it goes into the tint behind the state's name */
       --tone: var(--muted);
       --tone-on: #ffffff;
       --tone-ink: var(--muted);
+      --tint: 14%;
     }
 
-    /* on a dark dashboard the inks are lifted until they read as text */
+    /* on a dark dashboard the inks are lifted until they read as text, and
+       the tints deepened until they show against the dark grey */
     .homey-dark-mode .tile {
       --brand-ink: #ff4b52;
       --good-ink: #7cc45a;
       --calm-ink: #8bcf5c;
       --warn-ink: #f6d94a;
+      --tint: 24%;
     }
 
     .tile[data-tone="brand"] { --tone: var(--brand); --tone-on: var(--brand-on); --tone-ink: var(--brand-ink); }
-    .tile[data-tone="warn"] { --tone: var(--warn); --tone-on: var(--warn-on); --tone-ink: var(--warn-ink); }
+    .tile[data-tone="warn"] { --tone: var(--warn); --tone-on: var(--warn-on); --tone-ink: var(--warn-ink); --tint: 40%; }
     .tile[data-tone="good"] { --tone: var(--good); --tone-on: var(--good-on); --tone-ink: var(--good-ink); }
     .tile[data-tone="calm"] { --tone: var(--calm); --tone-on: var(--calm-on); --tone-ink: var(--calm-ink); }
+
+    .homey-dark-mode .tile[data-tone="warn"] { --tint: 45%; }
 
     .head {
       display: flex;
@@ -74,6 +84,9 @@
       min-width: 0;
     }
 
+    /* Whose widget this is: Picnic's app icon, its mark in white on its red,
+       where Homey's own widgets put the icon of the device they are about. */
+    .logo,
     .badge {
       flex: none;
       width: 28px;
@@ -81,15 +94,28 @@
       border-radius: 8px;
       display: grid;
       place-items: center;
+    }
+
+    .logo {
+      background: var(--brand);
+    }
+
+    .logo svg {
+      width: 18px;
+      height: 18px;
+      fill: #ffffff;
+    }
+
+    /* The state's icon on its own, for a state that has no name to put in a
+       badge: the icon says what the widget is about instead. */
+    .badge {
       color: var(--tone-ink);
       background: rgba(128, 128, 128, 0.14);
       background: color-mix(in srgb, var(--tone) 18%, transparent);
     }
 
-    .badge svg {
-      display: none;
-      width: 16px;
-      height: 16px;
+    .icon {
+      display: block;
       fill: none;
       stroke: currentColor;
       stroke-width: 2;
@@ -97,33 +123,41 @@
       stroke-linejoin: round;
     }
 
-    .badge[data-icon="scheduled"] .i-scheduled,
-    .badge[data-icon="truck"] .i-truck,
-    .badge[data-icon="clock"] .i-clock,
-    .badge[data-icon="check"] .i-check,
-    .badge[data-icon="basket"] .i-basket,
-    .badge[data-icon="alert"] .i-alert {
-      display: block;
+    .badge .icon {
+      width: 16px;
+      height: 16px;
     }
 
-    /* what the state is called, as a badge the way Picnic's app labels its
-       offers: a filled rounded rectangle with the text set on it */
+    /* What the state is called, as a badge the way Picnic's app labels its
+       offers, with the state's icon in front of the word: a tint of the
+       state's colour under its ink, so the one saturated thing on the widget
+       is the mark. */
     .status {
       min-width: 0;
-      padding: 1px 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 8px 1px 6px;
       border-radius: 6px;
-      background: var(--tone);
-      color: var(--tone-on);
+      background: rgba(128, 128, 128, 0.14);
+      background: color-mix(in srgb, var(--tone) var(--tint), transparent);
+      color: var(--tone-ink);
       font-size: var(--homey-font-size-small, 14px);
       line-height: var(--homey-line-height-small, 20px);
       font-weight: var(--homey-font-weight-bold, 700);
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    .status:empty {
-      display: none;
+    .status .icon {
+      flex: none;
+      width: 13px;
+      height: 13px;
+    }
+
+    .status .name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .meta {
@@ -174,6 +208,11 @@
       text-overflow: ellipsis;
     }
 
+    /* a number to hurry for is set in the colour for that */
+    .headline[data-value-tone="warn"] .value {
+      color: var(--warn-ink);
+    }
+
     .unit {
       flex: none;
       font-size: var(--homey-font-size-default, 17px);
@@ -190,11 +229,16 @@
     }
 
     /* a sentence is read rather than glanced at, and may take two lines */
+    .headline[data-kind="message"] .figure {
+      flex: 1 1 auto;
+    }
+
     .headline[data-kind="message"] .value {
       font-size: var(--homey-font-size-large, 20px);
       line-height: 24px;
       letter-spacing: 0;
       white-space: normal;
+      min-width: 0;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -261,12 +305,14 @@
       font-weight: var(--homey-font-weight-medium, 500);
     }
 
-    /* something to hurry for is Picnic's red, something good its green */
-    .note[data-tone="warn"] { color: var(--brand-ink); }
+    /* something to hurry for is in the deadline's ochre, something good in
+       Picnic's green; red is kept for the cart that still has to be ordered */
+    .note[data-tone="warn"] { color: var(--warn-ink); }
     .note[data-tone="good"] { color: var(--good-ink); }
 
     /* A half width tile on a phone has room for one thing per line, so the
-       amount next to the status makes way for the status itself. */
+       amount next to the status makes way for the status itself, and the
+       icon in front of the status's name for the name. */
     @media (max-width: 239px) {
       .meta {
         display: none;
@@ -276,19 +322,28 @@
         gap: 6px;
       }
 
+      .logo,
       .badge {
         width: 24px;
         height: 24px;
         border-radius: 7px;
       }
 
-      .badge svg {
+      .logo svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      .badge .icon {
         width: 14px;
         height: 14px;
       }
 
-      /* the badge says what the state is on its own, the icon only repeats it */
-      .head:has(.status:not(:empty)) .badge {
+      .status {
+        padding: 1px 8px;
+      }
+
+      .status .icon {
         display: none;
       }
 
@@ -321,6 +376,23 @@
         text-overflow: ellipsis;
       }
 
+      /* a day next to the number would push the number out, so it moves up
+         into the caption: "Bestel vóór morgen" over "23:00" */
+      .caption[data-day]::after {
+        content: attr(data-day);
+      }
+
+      .unit[data-unit="day"] {
+        display: none;
+      }
+
+      /* a sentence gets a third line, and a size at which a long word fits */
+      .headline[data-kind="message"] .value {
+        font-size: 18px;
+        line-height: 22px;
+        -webkit-line-clamp: 3;
+      }
+
       /* a half width tile has room for the short form of the note only */
       .note .long {
         display: none;
@@ -342,17 +414,24 @@
 </head>
 
 <body class="homey-widget-full">
+  <!-- The icons, drawn once and used twice: in the badge of a state without
+       a name, and in front of the name of one that has it. -->
+  <svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+    <symbol id="i-scheduled" viewBox="0 0 24 24"><circle cx="7" cy="7" r="5" /><path d="M7 4.6V7l1.6 1" /><path d="M12.5 9H16v8H3.5v-4.5" /><path d="M16 11h3.4l2.6 3.2V17h-6" /><circle cx="7.5" cy="18.3" r="1.9" /><circle cx="18" cy="18.3" r="1.9" /></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M2 6h13v11H2z" /><path d="M15 10h4l3 3.5V17h-7" /><circle cx="6.5" cy="18.3" r="1.9" /><circle cx="18" cy="18.3" r="1.9" /></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+    <symbol id="i-basket" viewBox="0 0 24 24"><path d="M6.5 10c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" /><path d="M2.5 10h19l-2.1 9.3a1.8 1.8 0 0 1-1.8 1.4H6.4a1.8 1.8 0 0 1-1.8-1.4Z" /></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+    <!-- Picnic's mark, the letters of its app icon; the same file as assets/icon.svg -->
+    <symbol id="picnic-mark" viewBox="0 0 1417.3 1417.3"><path d="M417.9,995.6c0-5.2,0-7.7,0-10.2c0.2-55.1,0.4-110.1,0.8-165.2c0.1-18,0.9-36,1.6-54c0.5-12.6,3.4-17.1,15.8-17.4 c35.3-0.9,70.6-1.3,105.9-0.4c15.7,0.4,18,4.4,18.4,20.2c0.9,45,2.1,90.1,2.2,135.1c0.2,88.4-0.3,176.9-0.7,265.3 c-0.1,17.7-0.8,35.3-1.6,53c-0.6,13-4.6,17.7-17.7,17.9c-34.6,0.5-69.3,0.2-104,0.2c-9.6,0-15.7-5.1-20.6-13.3 c-42-69.7-84.4-139.1-126.7-208.7c-2.4-4-4.9-7.9-8.6-13.9c-0.3,5-0.5,7.7-0.5,10.4c-0.3,49.4-0.4,98.8-0.8,148.2 c-0.2,19.7-0.9,39.3-1.8,59c-0.6,13.4-4.2,17.8-17.6,18c-35,0.6-70,0.6-104.9,0c-13.6-0.2-17.4-5-17.5-19 c-0.6-131.8-1.1-263.6-1.5-395.4c-0.1-20,0.8-40,1.5-60c0.4-12.2,3-16.4,15.2-16.6c36.3-0.8,72.6-0.4,108.9-0.3 c8.2,0,13.2,4.7,17.2,11.6c43.8,76,87.8,151.8,131.8,227.6C413.8,989.8,415.2,991.5,417.9,995.6z"/><path d="M280,599.7c0,16.4,0.3,31.7-0.1,46.9c-0.4,17-2.8,21-19.3,21.5c-34,1-68,1.1-102,0c-16.8-0.5-18.9-4.2-19.1-21.5 c-0.8-74.7-1.7-149.4-2-224.2c-0.2-63.1,0.3-126.1,0.7-189.2c0.1-13.3,0.8-26.7,1.5-40c0.6-11.5,3.6-14.7,15.2-15.4 c67.3-4.3,134.6-6.7,201.9-1.6c40.4,3.1,79.7,11.6,116.5,29.6c62.2,30.4,93.6,81.8,101.1,149.3c3.9,35.1,2.5,70-8.1,104 C547,521.9,502.7,560,442.3,581.1c-50.2,17.5-102.2,21.2-154.8,19.1C285.9,600.1,284.2,600,280,599.7z M282.6,463.9 c34.4,1.9,67.7,3.2,100-7.8c32.8-11.2,49.7-35.4,49.6-69.5c-0.1-34.4-17-57.9-49.8-69.4c-24.7-8.6-50.4-9.1-76.1-8.9 c-7.9,0.1-15.7,0.7-23.7,1.1C282.6,361.3,282.6,412,282.6,463.9z"/><path d="M1099.7,1251.6c-66.8-1.9-128.2-18.3-179.9-62.5c-49.9-42.7-76.2-97.7-83.1-162.4c-5.4-50-0.4-98.8,20.2-145 c33.3-74.6,92.1-118.6,170.4-137.1c82.9-19.6,160.8-7.9,232,41.1c8.5,5.9,10.2,11.5,5.7,20.8c-15.2,31.4-32.8,61.2-56.1,87.2 c-10.3,11.4-10.9,11.1-24.3,3.6c-45.4-25.5-92.6-31.8-140.8-9.2c-46.1,21.6-69,68.1-62.2,122.2c6.1,48.4,40.6,86.5,88.3,97.2 c43.5,9.8,83.2-0.9,120.6-23.2c19.5-11.6,21-12.6,34,5.7c19.1,26.8,35.8,55.3,53.5,83.1c4.5,7,0,11-4.8,15 c-36.5,30.3-78.3,49.3-124.8,57.7C1132.3,1248.9,1115.9,1249.8,1099.7,1251.6z"/><path d="M834.6,427.3c0.9-72,19.4-132.9,66.9-182.8c38.7-40.6,86.8-63.6,141.4-73.4c76.5-13.7,148-1.7,213,42.5 c14.6,9.9,14.8,10.5,7.2,26.6c-14.3,30.3-32.1,58.5-54.3,83.7c-9.7,11.1-10.8,11-23.5,3.7c-37.8-21.5-77.9-29.9-120.3-17.9 c-77.5,21.9-98.5,97.7-76.5,157.6c17.3,47.1,64.2,76,117,73.9c33-1.3,62.4-12.6,90-29.9c11.9-7.5,15-7.4,23.9,2.7 c24.1,27.1,42.4,58.1,59,90.2c3.7,7.1-1,10.4-5.4,14.1c-29.6,24.8-62.9,43.2-100.4,51.9c-101.4,23.5-193.7,7.7-270.1-67.9 c-40-39.6-59.4-89.4-65.7-144.7C835.4,446.1,835.1,434.4,834.6,427.3z"/><path d="M635,377c0-57.7-0.4-115.5,0.2-173.2c0.3-26.8,3.2-29.3,30.5-29.5c31.3-0.2,62.7,0.7,94,1.3c10.3,0.2,15.6,5.2,15.8,16.3 c0.6,30.7,1.9,268.2,0.7,356.3c-0.4,28.3-3,30.4-31.5,30.5c-31,0.2-62-0.7-93-1.4c-10.3-0.2-15.6-5.3-15.8-16.3 C634.7,499.8,633.9,377,635,377z"/><path d="M705,836.3c18.6,0.8,36.6,1.2,54.5,2.6c12.5,1,15.2,4,15.7,16.1c1.2,30.3,3,60.6,2.9,90.9c-0.2,88-0.8,176.1-1.9,264.1 c-0.4,28.1-1.3,29.5-29,30.5c-31.6,1.2-63.3,0.2-94.9-0.7c-12.2-0.3-15.8-4.6-16.3-16.8c-1.2-32-2.6-63.9-2.9-95.9 c-0.5-58.7-0.5-117.4,0-176.1c0.3-32.3,2-64.6,2.8-96.9c0.2-10,5.4-14.6,14.8-15.1C669,837.9,687.3,837.2,705,836.3z"/><path d="M705.6,780.8c-40.6-0.1-72.8-32.7-72.6-73.4c0.3-39.9,33.1-72.2,73.2-71.9c39.8,0.3,72.4,33.3,72.2,73 C778.1,748.6,745.6,780.9,705.6,780.8z"/></symbol>
+  </svg>
+
   <div class="tile" id="tile">
     <div class="head">
-      <span class="badge" id="badge" aria-hidden="true">
-        <svg class="i-scheduled" viewBox="0 0 24 24"><circle cx="7" cy="7" r="5" /><path d="M7 4.6V7l1.6 1" /><path d="M12.5 9H16v8H3.5v-4.5" /><path d="M16 11h3.4l2.6 3.2V17h-6" /><circle cx="7.5" cy="18.3" r="1.9" /><circle cx="18" cy="18.3" r="1.9" /></svg>
-        <svg class="i-truck" viewBox="0 0 24 24"><path d="M2 6h13v11H2z" /><path d="M15 10h4l3 3.5V17h-7" /><circle cx="6.5" cy="18.3" r="1.9" /><circle cx="18" cy="18.3" r="1.9" /></svg>
-        <svg class="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
-        <svg class="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
-        <svg class="i-basket" viewBox="0 0 24 24"><path d="M6.5 10c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" /><path d="M2.5 10h19l-2.1 9.3a1.8 1.8 0 0 1-1.8 1.4H6.4a1.8 1.8 0 0 1-1.8-1.4Z" /></svg>
-        <svg class="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
-      </span>
-      <span class="status" id="status"></span>
+      <span class="logo" aria-hidden="true"><svg><use href="#picnic-mark" /></svg></span>
+      <span class="badge" id="badge" aria-hidden="true"><svg class="icon"><use id="badge-icon" href="#i-basket" /></svg></span>
+      <span class="status" id="status-pill" hidden><svg class="icon" aria-hidden="true"><use id="status-icon" href="#i-basket" /></svg><span class="name" id="status"></span></span>
       <span class="meta" id="meta"></span>
     </div>
 
@@ -384,7 +463,9 @@
     var URGENT_MINUTES = 60;
 
     // What each state looks like: its colour, its icon and what it is called
-    // at the top. The words themselves come from the app.
+    // at the top. The words themselves come from the app, and are kept short
+    // enough to sit between the mark and the amount on a full width tile,
+    // and next to the mark alone on a half width one.
     var STATES = {
       // an order in hand is good news rather than something to act on, so it
       // is green; red is kept for the cart that still has to be ordered
@@ -503,6 +584,14 @@
       return Math.ceil(left / 60000);
     }
 
+    // Whole minutes since a moment, or null while it is still ahead or has
+    // been for less than a minute: there is nothing to say about that yet.
+    function minutesSince(target) {
+      var gone = now() - Date.parse(target);
+      if (isNaN(gone) || gone < 60000) return null;
+      return Math.floor(gone / 60000);
+    }
+
     // How long is left, in the largest unit that still says something useful,
     // as the number and the words around it. Minutes are the smallest unit on
     // here: a dashboard is read in passing, and seconds ticking away would be
@@ -560,6 +649,22 @@
       };
     }
 
+    // The next day something can be delivered on: how many of its slots are
+    // still open and when the first of those is, for a widget with nothing
+    // planned to say what could be.
+    function slotsNote(next) {
+      if (!next || !next['day'] || !isAmount(next['available'])) return null;
+
+      var values = { d: next['day'], a: next['available'], t: next['total'], h: next['time'] };
+
+      return {
+        first: text('next-slots', values),
+        second: text('next-slots-first', values),
+        short: text('next-slots-short', values),
+        tone: null
+      };
+    }
+
     // A note that says one thing, the same on every tile.
     function note(line, tone) {
       return { first: line, short: line, tone: tone };
@@ -592,6 +697,11 @@
         caption: '',
         headline: '',
         unit: '',
+        // the colour of the number, when it is one to hurry for
+        valueTone: null,
+        // a unit that is a day rather than a word like "min": a half width
+        // tile has no room for it next to the number and says it above
+        unitDay: '',
         // the detail line: when, and what about it
         when: '',
         what: '',
@@ -628,16 +738,25 @@
           shown.headline = label('now');
           shown.when = [data['day'], data['window']].filter(Boolean).join(' ');
           shown.progress = data['progress'];
+          // how late is the question a late delivery raises, so it is answered
+          var late = data['state'] == 'overdue' ? minutesSince(data['windowEnd']) : null;
+          if (late !== null) {
+            shown.note = {
+              first: text(late == 1 ? 'late-by-one' : 'late-by', { n: late }),
+              short: text('late-short', { n: late }),
+              tone: 'warn'
+            };
+          }
           break;
 
         case 'delivered':
           var deposit = data['deposit'];
           shown.meta = order;
           shown.kind = 'countdown';
-          shown.caption = label('delivered-at');
+          // the badge already says "delivered", so the caption says when
+          shown.caption = text('delivered-caption', { d: data['day'] });
           shown.headline = data['deliveredTime'];
-          shown.when = data['day'];
-          shown.what = containers(deposit);
+          shown.when = containers(deposit);
           if (deposit && isAmount(deposit['returned']) && deposit['returned'] > 0) {
             shown.note = note(text('deposit-returned', { t: money(deposit['returned']) }), 'good');
           }
@@ -649,38 +768,48 @@
           // Picnic suggests by itself is held for nobody, so it is not named
           var slot = cart['slotChosen'] && cart['slot'] && cart['slot']['cutOffAt'] ? cart['slot'] : null;
           var amount = showPrices() && isAmount(cart['totalPrice']) ? money(cart['totalPrice']) : '';
+          // what the cart is short of the slot's minimum, which has to be
+          // made up before it can be ordered at all
+          var short = showPrices() && isAmount(cart['minimumShort']) && cart['minimumShort'] > 0 ? cart['minimumShort'] : null;
 
-          shown.meta = products(cart['productCount']);
+          shown.meta = [products(cart['productCount']), amount].filter(Boolean).join(' · ');
 
           if (slot) {
             // The cart is not an order until it has been through the checkout,
-            // and that has to happen before the slot's deadline: that deadline
-            // is the one thing on the widget to act on, so it is the headline.
+            // and that has to happen before the slot's deadline. Below the
+            // minimum the shortfall comes first, since nothing can be ordered
+            // until it is made up, and the deadline goes under it; otherwise
+            // the deadline is the one thing on the widget to act on.
             var minutes = minutesUntil(slot['cutOffAt']);
+            var urgent = minutes !== null && minutes <= URGENT_MINUTES;
+            // today goes without saying; any other day does not
+            var deadline = slot['cutOffDay'] && slot['cutOffDay'] != label('today') ? slot['cutOffLabel'] : slot['cutOffTime'];
             shown.kind = 'countdown';
+            shown.when = [slot['day'], slot['window']].filter(Boolean).join(' ');
 
-            if (minutes !== null && minutes <= URGENT_MINUTES) {
-              shown.tone = 'warn';
+            if (short !== null) {
+              shown.caption = label('minimum-caption');
+              shown.headline = money(short);
+              shown.what = urgent ? text('order-within-short', { n: minutes }) : text('order-before-short', { t: deadline });
+            } else if (urgent) {
               shown.caption = label('order-within');
               shown.headline = String(minutes);
               shown.unit = label(minutes == 1 ? 'minute' : 'minutes');
+              shown.valueTone = 'warn';
             } else {
               shown.caption = label('order-before');
               shown.headline = slot['cutOffTime'];
-              // today goes without saying; any other day does not
               shown.unit = slot['cutOffDay'] && slot['cutOffDay'] != label('today') ? slot['cutOffDay'] : '';
+              shown.unitDay = shown.unit;
             }
-
-            shown.when = amount;
-            shown.what = [slot['day'], slot['window']].filter(Boolean).join(' ');
           } else {
-            shown.kind = 'countdown';
-            shown.headline = amount || products(cart['productCount']);
-            shown.when = cart['slotClosed'] ? label('slot-closed') : label('no-slot');
-          }
-
-          if (isAmount(cart['minimumShort']) && cart['minimumShort'] > 0) {
-            shown.note = note(text('minimum', { t: money(cart['minimumShort']) }), 'warn');
+            // without a slot the thing to do is pick one, and what there is to
+            // pick from is the next day with something open, in the short
+            // form: the long one is two lines, and the note may be taken
+            shown.headline = cart['slotClosed'] ? label('slot-closed') : label('pick-slot');
+            var open = slotsNote(data['nextSlots']);
+            if (open) shown.when = open.short;
+            if (short !== null) shown.note = note(text('minimum', { t: money(short) }), 'warn');
           }
           break;
 
@@ -698,6 +827,8 @@
         default:
           shown.headline = label('empty');
           shown.when = data['cartKnown'] ? label('empty-cart') : '';
+          // nothing planned, but this is when something could be
+          shown.note = slotsNote(data['nextSlots']);
       }
 
       return shown;
@@ -709,17 +840,32 @@
       var shown = view(state);
 
       element('tile').dataset.tone = shown.tone;
-      element('badge').dataset.icon = shown.icon;
 
+      // the icon sits in the badge when the state has no name, and in front
+      // of the name when it has one
+      var named = shown.status != '';
+      element('badge').hidden = named;
+      element('badge').dataset.icon = shown.icon;
+      element('badge-icon').setAttribute('href', '#i-' + shown.icon);
+      element('status-pill').hidden = !named;
+      element('status-pill').dataset.icon = shown.icon;
+      element('status-icon').setAttribute('href', '#i-' + shown.icon);
       element('status').textContent = shown.status;
       element('meta').textContent = shown.meta;
 
       element('caption').textContent = shown.caption;
       element('caption').hidden = shown.caption == '';
+      if (shown.unitDay) {
+        element('caption').dataset.day = ' ' + shown.unitDay;
+      } else {
+        delete element('caption').dataset.day;
+      }
       element('value').textContent = shown.headline;
       element('unit').textContent = shown.unit;
       element('unit').hidden = shown.unit == '';
+      element('unit').dataset.unit = shown.unitDay ? 'day' : '';
       element('headline').dataset.kind = shown.kind;
+      element('headline').dataset.valueTone = shown.valueTone || '';
 
       element('when').textContent = shown.when;
       element('what').textContent = shown.what;

@@ -16,7 +16,7 @@ const script = html.match(/<script type="text\/javascript">([\s\S]*?)<\/script>/
 // the English labels the app hands over, straight from the locale file
 const LABELS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'locales', 'en.json'), 'utf8')).widget.delivery;
 
-const NODES = ['tile', 'badge', 'status', 'meta', 'caption', 'headline', 'value', 'unit', 'detail', 'when', 'what', 'track', 'fill', 'note', 'note-first', 'note-second', 'note-short'];
+const NODES = ['tile', 'badge', 'badge-icon', 'status-pill', 'status-icon', 'status', 'meta', 'caption', 'headline', 'value', 'unit', 'detail', 'when', 'what', 'track', 'fill', 'note', 'note-first', 'note-second', 'note-short'];
 
 // The note as a full width tile shows it, its two lines joined by " / ", and as
 // a half width one does.
@@ -37,6 +37,8 @@ function harness(settings) {
       hidden: false,
       dataset: {},
       style: {},
+      attributes: {},
+      setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener() { }
     };
   });
@@ -89,6 +91,7 @@ function payload(stored, extra) {
     progress: derived.progress,
     day: derived.etaStart || derived.deliveredAt ? 'today' : '',
     window: derived.etaStart ? '16:11–16:31' : '',
+    windowEnd: derived.etaEnd,
     deliveredTime: derived.deliveredAt ? '16:18' : '',
     cutOffAt: derived.cutOffAt,
     cutOffLabel: derived.cutOffAt ? 'today 23:00' : '',
@@ -113,6 +116,7 @@ function payload(stored, extra) {
       } : null
     } : null,
     cartKnown: derived.cartKnown,
+    nextSlots: derived.nextSlots ? { day: 'tomorrow', time: '08:30', available: derived.nextSlots.available, total: derived.nextSlots.total } : null,
     checkedLabel: derived.checkedAt ? 'Sun 5 Apr 08:00' : '',
     locale: 'en-US',
     labels: LABELS
@@ -120,6 +124,9 @@ function payload(stored, extra) {
 }
 
 const WINDOW = { etaStart: '2026-07-28T16:11:00.000+02:00', etaEnd: '2026-07-28T16:31:00.000+02:00' };
+
+// the next day with an open slot, as the cart lists it
+const NEXT = { windowStart: '2026-07-29T08:30:00.000+02:00', windowEnd: '2026-07-29T09:30:00.000+02:00', available: 3, total: 12 };
 const ANNOUNCED = Object.assign({ orderStatus: 'delivery_announced', announcedAt: '2026-07-28T15:41:00.000+02:00' }, WINDOW);
 
 function cart(extra) {
@@ -176,7 +183,7 @@ test('the window itself says the groceries are arriving', () => {
 
   adopt(payload(Object.assign({ now: '2026-07-28T16:16:00.000+02:00' }, ANNOUNCED)));
 
-  assert.strictEqual(nodes.status.textContent, 'Arriving');
+  assert.strictEqual(nodes.status.textContent, 'Almost there');
   assert.strictEqual(headline(), 'Any minute now');
   assert.strictEqual(nodes.fill.style.width, '25%');
 });
@@ -190,6 +197,10 @@ test('a delivery that is late says so in its own colour', () => {
   assert.strictEqual(nodes.tile.dataset.tone, 'warn');
   assert.strictEqual(headline(), 'Any minute now');
   assert.strictEqual(nodes.fill.style.width, '100%');
+  // and how late, which is the question the word raises
+  assert.strictEqual(noteOf(nodes), '29 minutes past the announced window');
+  assert.strictEqual(shortNoteOf(nodes), '29 min late');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
 test('delivered groceries show the moment they arrived and what they cost', () => {
@@ -199,8 +210,9 @@ test('delivered groceries show the moment they arrived and what they cost', () =
 
   assert.strictEqual(nodes.status.textContent, 'Delivered');
   assert.strictEqual(nodes.tile.dataset.tone, 'good');
-  assert.strictEqual(headline(), 'Delivered at 16:18');
-  assert.strictEqual(detail(), 'today');
+  // the badge already says delivered, so the caption says when
+  assert.strictEqual(headline(), 'today at 16:18');
+  assert.strictEqual(detail(), '');
   assert.strictEqual(nodes.meta.textContent, '€52.50');
   assert.strictEqual(nodes.note.hidden, true);
 });
@@ -215,7 +227,7 @@ test('deposit that came back is shown with the delivery', () => {
     now: '2026-07-28T16:40:00.000+02:00'
   }, WINDOW)));
 
-  assert.strictEqual(detail(), 'today · 6× Bottles, 1× Crates');
+  assert.strictEqual(detail(), '6× Bottles, 1× Crates');
   assert.strictEqual(noteOf(nodes), '+€4.80 deposit back');
   assert.strictEqual(nodes.note.dataset.tone, 'good');
 });
@@ -273,13 +285,17 @@ test('amounts can be turned off', () => {
   assert.strictEqual(nodes.meta.textContent, '');
 
   adopt(payload({ orderStatus: '', cart: cart({ slot: null }), now: '2026-07-28T10:00:00.000+02:00' }));
-  assert.strictEqual(headline(), '9 products');
+  assert.strictEqual(headline(), 'Pick a delivery slot');
+  assert.strictEqual(nodes.meta.textContent, '9 products');
 
-  // and a cart with a slot keeps its deadline, just not the amount under it
+  // and a cart with a slot keeps its deadline, just not the amount next to
+  // it, nor what it is short of the minimum, which is an amount too
   const deadline = harness({ show_price: false });
-  deadline.adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
+  deadline.adopt(payload({ orderStatus: '', cart: cart({ minimumOrderValue: 45 }), now: '2026-07-28T10:00:00.000+02:00' }));
   assert.strictEqual(deadline.headline(), 'Order before 23:00 Fri 19 Sep');
   assert.strictEqual(deadline.detail(), 'Sat 20 Sep 18:15–19:15');
+  assert.strictEqual(deadline.nodes.meta.textContent, '9 products');
+  assert.strictEqual(deadline.nodes.note.hidden, true);
 });
 
 test('a clock that runs ahead of Homey does not count down to the wrong minute', () => {
@@ -381,12 +397,13 @@ test('a cart with a slot picked is not an order yet, and says until when it can 
 
   adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
 
-  assert.strictEqual(nodes.status.textContent, 'Not ordered yet');
+  assert.strictEqual(nodes.status.textContent, 'To order');
   assert.strictEqual(nodes.tile.dataset.tone, 'brand');
-  assert.strictEqual(nodes.badge.dataset.icon, 'basket');
+  assert.strictEqual(nodes['status-pill'].dataset.icon, 'basket');
   assert.strictEqual(headline(), 'Order before 23:00 Fri 19 Sep');
-  assert.strictEqual(detail(), '€22.03 · Sat 20 Sep 18:15–19:15');
-  assert.strictEqual(nodes.meta.textContent, '9 products');
+  assert.strictEqual(detail(), 'Sat 20 Sep 18:15–19:15');
+  // how much and how many sit where an order shows them, at the top right
+  assert.strictEqual(nodes.meta.textContent, '9 products · €22.03');
   assert.strictEqual(nodes.note.hidden, true);
 });
 
@@ -394,59 +411,74 @@ test('a deadline today goes without its day', () => {
   const { adopt, headline } = harness();
 
   adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }, {
-    cart: { totalPrice: 32.86, productCount: 18, minimumShort: 12.14, slotChosen: true, slotClosed: false, slot: { day: 'tomorrow', window: '08:30–09:30', cutOffAt: '2026-07-29T13:00:00.000+02:00', cutOffTime: '13:00', cutOffDay: 'today' } }
+    cart: { totalPrice: 32.86, productCount: 18, minimumShort: null, slotChosen: true, slotClosed: false, slot: { day: 'tomorrow', window: '08:30–09:30', cutOffAt: '2026-07-29T13:00:00.000+02:00', cutOffTime: '13:00', cutOffDay: 'today', cutOffLabel: 'today 13:00' } }
   }));
 
   assert.strictEqual(headline(), 'Order before 13:00');
 });
 
-test('the order deadline and the missing amount are both said', () => {
-  const { nodes, adopt, headline } = harness();
+test('below the minimum, the shortfall leads and the deadline goes under it', () => {
+  const { nodes, adopt, headline, detail } = harness();
 
   adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 32.86, productCount: 18, minimumOrderValue: 45 }), now: '2026-07-28T10:00:00.000+02:00' }));
 
-  assert.strictEqual(headline(), 'Order before 23:00 Fri 19 Sep');
-  assert.strictEqual(noteOf(nodes), '€12.14 short of the minimum');
-  assert.strictEqual(nodes.note.dataset.tone, 'warn');
+  // nothing can be ordered until the minimum is made up, so that comes first
+  assert.strictEqual(headline(), 'Below the minimum by €12.14');
+  assert.strictEqual(detail(), 'Sat 20 Sep 18:15–19:15 · order before Fri 19 Sep 23:00');
+  assert.strictEqual(nodes.meta.textContent, '18 products · €32.86');
+  assert.strictEqual(nodes.note.hidden, true);
 });
 
-test('the last hour to order a picked slot is counted down, in the colour to hurry in', () => {
+test('below the minimum with the deadline within the hour, the minutes go under the shortfall', () => {
+  const { adopt, headline, detail } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-29T22:20:00.000+02:00' }));
+
+  assert.strictEqual(headline(), 'Below the minimum by €6.80');
+  assert.strictEqual(detail(), 'Sat 20 Sep 18:15–19:15 · order within 40 min');
+});
+
+test('the last hour to order a picked slot is counted down, the number in the colour to hurry in', () => {
   const { nodes, adopt, headline } = harness();
 
   adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T22:20:00.000+02:00' }));
 
   assert.strictEqual(headline(), 'Order within 40 min');
-  assert.strictEqual(nodes.tile.dataset.tone, 'warn');
+  // the tile stays Picnic's red: it is still a cart to order, only in a hurry
+  assert.strictEqual(nodes.tile.dataset.tone, 'brand');
+  assert.strictEqual(nodes.headline.dataset.valueTone, 'warn');
 });
 
-test('a picked slot whose deadline passed is said to be too late, not unpicked', () => {
+test('a picked slot whose deadline passed asks for a new one, and says what there is to pick from', () => {
   const { adopt, headline, detail } = harness();
 
-  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T23:30:00.000+02:00' }));
+  adopt(payload({ orderStatus: '', cart: cart({ nextSlots: NEXT }), now: '2026-07-29T23:30:00.000+02:00' }));
 
-  assert.strictEqual(headline(), '€22.03');
-  assert.strictEqual(detail(), 'Too late for this slot');
+  assert.strictEqual(headline(), 'Pick a new delivery slot');
+  assert.strictEqual(detail(), 'tomorrow 3/12 free, first 08:30');
 });
 
-test('a cart without a picked slot says none was picked, rather than naming Picnic\'s guess', () => {
+test('a cart without a picked slot asks for one, rather than naming Picnic\'s guess', () => {
   const { adopt, headline, detail } = harness();
 
   adopt(payload({
     orderStatus: '',
-    cart: cart({ slot: { chosen: false, windowStart: '2026-07-28T18:15:00.000+02:00', windowEnd: '2026-07-28T19:15:00.000+02:00' } }),
+    cart: cart({ slot: { chosen: false, windowStart: '2026-07-28T18:15:00.000+02:00', windowEnd: '2026-07-28T19:15:00.000+02:00' }, nextSlots: NEXT }),
     now: '2026-07-28T10:00:00.000+02:00'
   }));
 
-  assert.strictEqual(headline(), '€22.03');
-  assert.strictEqual(detail(), 'No delivery slot picked');
+  assert.strictEqual(headline(), 'Pick a delivery slot');
+  assert.strictEqual(detail(), 'tomorrow 3/12 free, first 08:30');
 });
 
-test('a cart below the minimum says how much is missing', () => {
-  const { nodes, adopt } = harness();
+test('a cart without a slot and below the minimum says how much is missing underneath', () => {
+  const { nodes, adopt, headline, detail } = harness();
 
-  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-28T10:00:00.000+02:00' }));
+  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35, slot: null }), now: '2026-07-28T10:00:00.000+02:00' }));
 
-  assert.strictEqual(nodes.meta.textContent, '1 product');
+  assert.strictEqual(headline(), 'Pick a delivery slot');
+  assert.strictEqual(detail(), '');
+  assert.strictEqual(nodes.meta.textContent, '1 product · €28.20');
   assert.strictEqual(noteOf(nodes), '€6.80 short of the minimum');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
@@ -461,11 +493,11 @@ test('a cart that can no longer be added to an order is not held over the reader
 });
 
 test('amounts are written in Homey\'s language', () => {
-  const { adopt, headline } = harness();
+  const { nodes, adopt } = harness();
 
   adopt(payload({ orderStatus: '', cart: cart({ slot: null }), now: '2026-07-28T10:00:00.000+02:00' }, { locale: 'nl' }));
 
-  assert.strictEqual(headline(), '€ 22,03');
+  assert.strictEqual(nodes.meta.textContent, '9 products · €\u00a022,03');
 });
 
 test('no countdown on the widget is ever finer than a minute', () => {
@@ -609,9 +641,84 @@ test('an empty cart in the last hour gives the short form its own words', () => 
 test('a one line note is the same on every tile', () => {
   const { nodes, adopt } = harness();
 
-  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-28T10:00:00.000+02:00' }));
+  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35, slot: null }), now: '2026-07-28T10:00:00.000+02:00' }));
 
   assert.strictEqual(noteOf(nodes), '€6.80 short of the minimum');
   assert.strictEqual(shortNoteOf(nodes), '€6.80 short of the minimum');
   assert.strictEqual(nodes['note-second'].hidden, true);
+});
+
+test('nothing planned says when something could be, on a line of its own', () => {
+  const { nodes, adopt, headline, detail } = harness();
+
+  adopt(payload({ orderStatus: '', cart: { totalPrice: 0, productCount: 0, nextSlots: NEXT }, now: '2026-07-28T16:40:00.000+02:00' }));
+
+  assert.strictEqual(headline(), 'Nothing planned');
+  assert.strictEqual(detail(), 'Your cart is empty');
+  assert.strictEqual(noteOf(nodes), 'Slots tomorrow: 3 of 12 free / First at 08:30');
+  assert.strictEqual(shortNoteOf(nodes), 'tomorrow 3/12 free, first 08:30');
+  assert.strictEqual(nodes.note.dataset.tone, '');
+});
+
+test('the state\'s icon sits in front of its name, and on its own where there is no name', () => {
+  const named = harness();
+  named.adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
+
+  assert.strictEqual(named.nodes['status-pill'].hidden, false);
+  assert.strictEqual(named.nodes['status-icon'].attributes.href, '#i-truck');
+  assert.strictEqual(named.nodes.badge.hidden, true);
+
+  const nameless = harness();
+  nameless.adopt(payload(Object.assign({ signInNeeded: true, now: '2026-07-28T16:40:00.000+02:00' }, ANNOUNCED)));
+
+  assert.strictEqual(nameless.nodes['status-pill'].hidden, true);
+  assert.strictEqual(nameless.nodes.badge.hidden, false);
+  assert.strictEqual(nameless.nodes['badge-icon'].attributes.href, '#i-alert');
+  assert.strictEqual(nameless.nodes.tile.dataset.tone, 'warn');
+});
+
+test('the mark is on every tile, whatever the state', () => {
+  // the mark is the widget's own markup rather than something the script
+  // puts there, so it is there before the app has said anything at all
+  assert.ok(/class="logo"[^>]*>\s*<svg>\s*<use href="#picnic-mark"/.test(html));
+  assert.ok(html.includes('<symbol id="picnic-mark"'));
+});
+
+// The states the gallery shows (scripts/widget-gallery.js) go through the
+// widget here too, in both languages: a state that renders with nothing large
+// on it, or does not render at all, is caught before anyone opens the gallery.
+const { widgetStates } = require('./support/widgetstates.js');
+
+['nl', 'en'].forEach(language => {
+  test('every state in the gallery renders in ' + language, () => {
+    const states = widgetStates(language, '2026-09-18T11:06:00.000+02:00');
+
+    for (const id in states) {
+      const { nodes, adopt, headline } = harness();
+      adopt(states[id].payload);
+
+      assert.ok(headline() != '', id + ' has no headline');
+      assert.ok(nodes.tile.dataset.tone, id + ' has no tone');
+      // a note or a detail that is shown is never empty words
+      if (!nodes.note.hidden) assert.ok(nodes['note-first'].textContent && nodes['note-short'].textContent, id + ' has an empty note');
+      if (!nodes.detail.hidden) assert.ok(nodes.when.textContent || nodes.what.textContent, id + ' has an empty detail line');
+      // no label placeholder ever reaches the screen
+      NODES.forEach(node => assert.ok(!/__[a-z]__/.test(nodes[node].textContent), id + ' shows a raw placeholder in ' + node));
+    }
+  });
+});
+
+test('a deadline on another day carries that day as its unit, and hands it to the caption for a half width tile', () => {
+  const { nodes, adopt, headline } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
+  assert.strictEqual(headline(), 'Order before 23:00 Fri 19 Sep');
+  assert.strictEqual(nodes.unit.dataset.unit, 'day');
+  assert.strictEqual(nodes.caption.dataset.day, ' Fri 19 Sep');
+
+  // a unit that is a word stays where it is, whatever the width
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T22:20:00.000+02:00' }));
+  assert.strictEqual(headline(), 'Order within 40 min');
+  assert.strictEqual(nodes.unit.dataset.unit, '');
+  assert.strictEqual(nodes.caption.dataset.day, undefined);
 });
