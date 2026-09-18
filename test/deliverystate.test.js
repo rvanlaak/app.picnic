@@ -411,3 +411,23 @@ test('an order placed after the last delivery shows with the deadline to add to 
   // an empty cart has nothing still to add
   assert.strictEqual(state.cart, null);
 });
+
+test('the next day with an open slot comes along in every state, full cart or empty', () => {
+  const next = { windowStart: '2026-09-19T08:30:00.000+02:00', windowEnd: '2026-09-19T09:30:00.000+02:00', available: 3, total: 12 };
+
+  const empty = deriveDeliveryState({ orderStatus: '', cart: { totalPrice: 0, productCount: 0, nextSlots: next }, checkedAt: '2026-09-18T10:00:00.000+02:00', now: '2026-09-18T10:00:00.000+02:00' });
+  assert.strictEqual(empty.state, 'empty');
+  assert.deepStrictEqual(empty.nextSlots, next);
+
+  const full = deriveDeliveryState({ orderStatus: '', cart: { totalPrice: 21.15, productCount: 7, nextSlots: next }, checkedAt: '2026-09-18T10:00:00.000+02:00', now: '2026-09-18T10:00:00.000+02:00' });
+  assert.strictEqual(full.state, 'cart');
+  assert.deepStrictEqual(full.nextSlots, next);
+});
+
+test('a next day the cart cannot vouch for is left out', () => {
+  const at = { checkedAt: '2026-09-18T10:00:00.000+02:00', now: '2026-09-18T10:00:00.000+02:00' };
+
+  assert.strictEqual(deriveDeliveryState(Object.assign({ orderStatus: '', cart: null }, at)).nextSlots, null);
+  assert.strictEqual(deriveDeliveryState(Object.assign({ orderStatus: '', cart: { totalPrice: 0, productCount: 0, nextSlots: { windowStart: 'soon', available: 3, total: 12 } } }, at)).nextSlots, null);
+  assert.strictEqual(deriveDeliveryState(Object.assign({ orderStatus: '', cart: { totalPrice: 0, productCount: 0, nextSlots: { windowStart: '2026-09-19T08:30:00.000+02:00', available: 0, total: 12 } } }, at)).nextSlots, null);
+});

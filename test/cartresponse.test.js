@@ -106,7 +106,7 @@ test('does not throw on a body that is not a string', () => {
 test('a cart reports what it is worth and how much is in it', () => {
   const cart = parseCart(JSON.stringify({ total_price: 4320, total_count: 12, minimum_order_value: 3500 }));
 
-  assert.deepStrictEqual(cart, { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35, slot: null });
+  assert.deepStrictEqual(cart, { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35, slot: null, nextSlots: null });
 });
 
 test('a cart that does not total itself up is counted line by line', () => {
@@ -190,4 +190,42 @@ test('the cart is worth what the checkout says it is worth', () => {
 
 test('a cart that does not mention a checkout total is worth its total', () => {
   assert.strictEqual(parseCart(JSON.stringify({ total_price: 2207 })).totalPrice, 22.07);
+});
+
+// The two weeks of slots Picnic lists with the cart: the next day something
+// can be delivered on, and how open that day is.
+function slot(day, time, available) {
+  return { slot_id: day + time, window_start: day + "T" + time + ":00.000+02:00", window_end: day + "T" + time.replace(/^(\d\d)/, (h) => String(Number(h) + 1).padStart(2, "0")) + ":00.000+02:00", is_available: available };
+}
+
+test('the next day with an open slot is counted, open and all', () => {
+  const parsed = parseCart(JSON.stringify({
+    total_price: 0,
+    delivery_slots: [slot("2026-09-19", "08:30", true), slot("2026-09-19", "11:15", false), slot("2026-09-19", "14:30", true), slot("2026-09-20", "08:30", true)]
+  }));
+
+  assert.deepStrictEqual(parsed["nextSlots"], {
+    windowStart: "2026-09-19T08:30:00.000+02:00",
+    windowEnd: "2026-09-19T09:30:00.000+02:00",
+    available: 2,
+    total: 3
+  });
+});
+
+test('a day with nothing open is passed over for the next one', () => {
+  const parsed = parseCart(JSON.stringify({
+    total_price: 0,
+    // listed out of order too: Picnic's order is not relied on
+    delivery_slots: [slot("2026-09-20", "14:30", true), slot("2026-09-19", "08:30", false), slot("2026-09-20", "08:30", true), slot("2026-09-19", "14:30", false)]
+  }));
+
+  assert.strictEqual(parsed["nextSlots"]["windowStart"], "2026-09-20T08:30:00.000+02:00");
+  assert.strictEqual(parsed["nextSlots"]["available"], 2);
+  assert.strictEqual(parsed["nextSlots"]["total"], 2);
+});
+
+test('no open slot at all, or no list, is no next day', () => {
+  assert.strictEqual(parseCart(JSON.stringify({ total_price: 0, delivery_slots: [slot("2026-09-19", "08:30", false)] }))["nextSlots"], null);
+  assert.strictEqual(parseCart(JSON.stringify({ total_price: 0 }))["nextSlots"], null);
+  assert.strictEqual(parseCart(JSON.stringify({ total_price: 0, delivery_slots: [{ window_start: 5 }, null] }))["nextSlots"], null);
 });

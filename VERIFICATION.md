@@ -16,6 +16,7 @@ needs a real account, a real delivery or a real dashboard to settle.
   what went back, and the widget drops a delivery four hours after it arrived.
   If counting usually takes longer, nobody sees it there, and it belongs in a
   notification or a flow trigger instead.
+- [ ] **A slot that is full.** The widget counts `delivery_slots[].is_available` per day for "3 van 12 vrij". Every slot on every cart seen so far was available, so it is not known whether Picnic marks a full one `false` or leaves it out, in which case the count only ever says "12 van 12". Watch a busy day under `make run`.
 - [ ] **Politeness.** While a dashboard shows the widget, the cart and, with no
   order being followed, the order summary are each fetched at most once every
   five minutes, and a made delivery at most once every ten. Confirm Picnic does

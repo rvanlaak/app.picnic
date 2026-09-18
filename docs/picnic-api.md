@@ -84,6 +84,7 @@ nothing is running.
 | `selected_slot` | `{ slot_id, state }`: `EXPLICIT` once someone picked a slot, `IMPLICIT` for Picnic's own suggestion, which is not held for anyone (both seen on real carts; one client also mentions `ACTIVE`, not seen) |
 | `delivery_slots[]` | `{ slot_id, window_start, window_end, cut_off_time, minimum_order_value, is_available, selected, reserved }`; look the selected slot up here by `slot_id` |
 | `delivery_slots[].minimum_order_value` | the minimum for that slot, absent on past ones. Confirmed: 4500 on the slot the Picnic app said was "available from €45" |
+| `delivery_slots[].is_available` | whether the slot can still be booked. The app counts these per day (the date in `window_start`, which carries the slot's own offset) for "3 of 12 free" and takes the first day with one open. Two weeks of 12–15 slots a day, one- and two-hour windows overlapping, on every cart seen; **unconfirmed** what a full slot looks like, since none has been seen yet: `false` here, or dropped from the list |
 
 On a real cart (agent `1.236.1`): lines 43,60 − `total_savings` 9,27 −
 `membership_savings` 1,47 = `total_price` 32,86, which is what the Picnic app
