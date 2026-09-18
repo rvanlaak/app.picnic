@@ -147,6 +147,20 @@ While the app is running, the files under `widgets/delivery/public/` are served
 straight from this folder. Editing the widget and reloading it on the dashboard
 shows the change without restarting the app.
 
+The widget can also be looked at without a Homey, in every state at once:
+
+```bash
+make gallery
+```
+
+serves a page with the widget's own code fed each of the states in
+`test/support/widgetstates.js`, in both widths and both themes and either
+language; edit the widget or the states and reload. Those same states go
+through the widget in the tests, so a state that renders wrong is caught
+there first. `make previews` redraws the two preview images in
+`widgets/delivery/` from `scripts/previews.js` (it needs `rsvg-convert`, from
+`brew install librsvg`).
+
 ## Changelog
 
 Every release and what changed in it is in [CHANGELOG.md](CHANGELOG.md).

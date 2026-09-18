@@ -12,7 +12,7 @@ NPM ?= npm
 HOMEY ?= homey
 
 .DEFAULT_GOAL := help
-.PHONY: help run run-clean install test validate homey-cli
+.PHONY: help run run-clean install test validate gallery previews homey-cli
 
 help: ## Say what is here
 	@echo "make <target>"
@@ -33,6 +33,12 @@ test: node_modules ## Run the tests
 
 validate: node_modules ## Check the app the way the App Store does, without a Homey
 	node scripts/validate.js
+
+gallery: ## Show every state of the dashboard widget in a browser, without a Homey
+	node scripts/widget-gallery.js
+
+previews: ## Redraw the widget's preview images for the App Store
+	node scripts/previews.js
 
 # The dependencies, installed only when package.json is newer than the last
 # install. npm does not always leave a mark make can read, so one is left here.

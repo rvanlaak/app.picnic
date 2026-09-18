@@ -37,6 +37,7 @@ each release is what Homey shows in the app store, and lives in `.homeychangelog
 - A late delivery says how late: "12 minuten na het aangekondigde moment". A delivered one no longer says "Bezorgd" twice: the badge says it, the headline says when
 - With nothing planned, and with a cart that has no slot, the widget says when something could be delivered: "Bezorgmomenten morgen: 3 van 12 vrij" and "Eerste om 08:30", counted from the two weeks of slots Picnic lists with the cart. A slot that closed unordered asks for a new one instead of only saying it is too late
 - The names of the states are short enough to sit between the mark and the amount: "Wordt bezorgd" became "Komt eraan"
+- `make gallery` shows every state of the widget in a browser, in both widths and both themes, without a Homey, and the states it shows are the ones the tests put through the widget. `make previews` redraws the App Store preview images, which now carry Picnic's mark
 
 ## 3.7.0
 
