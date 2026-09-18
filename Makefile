@@ -28,7 +28,7 @@ run-clean: node_modules homey-cli ## Run it after deleting the stored data, whic
 install: node_modules homey-cli ## Install the app on your Homey, where it stays
 	$(HOMEY) app install
 
-test: ## Run the unit tests, which need nothing but Node
+test: node_modules ## Run the tests
 	node --test
 
 validate: node_modules ## Check the app the way the App Store does, without a Homey
