@@ -50,10 +50,10 @@ for all). A list of deliveries, newest first:
 | `delivery_id` | what to ask `GET /deliveries/{id}` about |
 | `status` | `CURRENT`, `COMPLETED`, `CANCELLED` |
 | `slot.window_start`, `slot.window_end` | the slot that was booked |
-| `slot.cut_off_time` | until when the order can still be changed |
+| `slot.cut_off_time` | until when the order can still be changed; matches Picnic's FAQ rule of 13:00 the day before a morning slot and 23:00 the day before a later one, which `lib/cutoff.js` falls back on |
 | `eta2.start`, `eta2.end` | the delivery moment, once Picnic announces it (~20 minutes wide) |
 | `delivery_time.start`, `.end` | when the driver arrived and left |
-| `orders[].total_price` | per order; a delivery can carry several |
+| `orders[].total_price` | per order; a delivery can carry several, and Home Assistant sums them the same way. Whether it includes deposit is not documented |
 
 A delivered order usually **drops out** of `["CURRENT"]` rather than turning up
 with a `delivery_time`, which is why the app reads an empty list as "delivered"
@@ -80,8 +80,9 @@ nothing is running.
 | `total_count` | number of products (a line of 4 counts 4) |
 | `items[]` | order lines: `price`, `display_price`, `decorators[]`, and the articles in `items[]` |
 | `items[].decorators[]` | `{ type: "PROMO", text: "1+1 gratis" \| "Family" \| "BundelBonus" \| "25% korting" }` and `{ type: "PRICE", display_price }`, the line price after it |
-| `selected_slot` | `{ slot_id, state }`: `EXPLICIT` once someone picked a slot, `IMPLICIT` for Picnic's own suggestion, which is not held for anyone |
-| `delivery_slots[]` | `{ slot_id, window_start, window_end, cut_off_time, minimum_order_value, is_available, selected, reserved }` |
+| `selected_slot` | `{ slot_id, state }`: `EXPLICIT` once someone picked a slot, `IMPLICIT` for Picnic's own suggestion, which is not held for anyone (both seen on real carts; one client also mentions `ACTIVE`, not seen) |
+| `delivery_slots[]` | `{ slot_id, window_start, window_end, cut_off_time, minimum_order_value, is_available, selected, reserved }`; look the selected slot up here by `slot_id` |
+| `delivery_slots[].minimum_order_value` | the minimum for that slot, absent on past ones. Confirmed: 4500 on the slot the Picnic app said was "available from €45" |
 
 On a real cart (agent `1.236.1`): lines 43,60 − `total_savings` 9,27 −
 `membership_savings` 1,47 = `total_price` 32,86, which is what the Picnic app
