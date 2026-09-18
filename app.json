@@ -2,7 +2,7 @@
   "_comment": "This file is generated. Please edit .homeycompose/app.json instead.",
   "id": "app.picnic",
   "version": "3.7.0",
-  "compatibility": ">=12.1.0",
+  "compatibility": ">=12.3.0",
   "sdk": 3,
   "name": {
     "en": "Picnic"
@@ -407,17 +407,8 @@
           "type": "checkbox",
           "value": true,
           "title": {
-            "en": "Show what the order costs",
-            "nl": "Toon het bedrag van de bestelling"
-          }
-        },
-        {
-          "id": "open_on_tap",
-          "type": "checkbox",
-          "value": true,
-          "title": {
-            "en": "Open Picnic when the widget is tapped",
-            "nl": "Open Picnic bij een tik op de widget"
+            "en": "Show amounts",
+            "nl": "Toon bedragen"
           }
         }
       ],

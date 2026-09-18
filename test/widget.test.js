@@ -13,47 +13,23 @@ const { deriveDeliveryState } = require('../lib/deliverystate.js');
 const html = fs.readFileSync(path.join(__dirname, '..', 'widgets', 'delivery', 'public', 'index.html'), 'utf8');
 const script = html.match(/<script type="text\/javascript">([\s\S]*?)<\/script>/)[1];
 
-const LABELS = {
-  'signed-out': 'Sign in on the Picnic app settings page',
-  'idle': 'No delivery planned',
-  'ordered': 'Ordered',
-  'announced': 'On its way',
-  'arriving': 'Arriving',
-  'delivered': 'Delivered',
-  'overdue': 'Later than planned',
-  'now': 'Any minute now',
-  'cart': 'In your cart',
-  'item': '__n__ product',
-  'items': '__n__ products',
-  'minimum': '__t__ to the minimum',
-  'cut-off-at': 'Add until __t__',
-  'cut-off-in': '__n__ min left to add',
-  'to-order-at': '__a__ not ordered yet, until __t__',
-  'to-order-in': '__a__ not ordered yet, __n__ min left',
-  'day': 'in __n__ day',
-  'days': 'in __n__ days',
-  'hour': 'in __n__ hour',
-  'hours': 'in __n__ hours',
-  'minute': 'in __n__ min',
-  'minutes': 'in __n__ min'
-};
+// the English labels the app hands over, straight from the locale file
+const LABELS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'locales', 'en.json'), 'utf8')).widget.delivery;
+
+const NODES = ['tile', 'badge', 'status', 'meta', 'headline', 'pre', 'value', 'unit', 'detail', 'when', 'what', 'track', 'fill', 'note'];
 
 function harness(settings) {
   const nodes = {};
-  const listeners = {};
 
-  ['delivery', 'top', 'state', 'price', 'headline', 'detail', 'track', 'fill', 'footnote'].forEach(id => {
+  NODES.forEach(id => {
     nodes[id] = {
       textContent: '',
       hidden: false,
       dataset: {},
-      style: { setProperty(name, value) { this[name] = value; } },
-      addEventListener(event, listener) { listeners[id + ':' + event] = listener; }
+      style: {},
+      addEventListener() { }
     };
   });
-
-  const opened = [];
-  const haptics = [];
 
   const context = {
     document: { getElementById: id => nodes[id] },
@@ -61,6 +37,7 @@ function harness(settings) {
     Intl,
     Date,
     Promise,
+    Object,
     setTimeout() { },
     setInterval() { },
     isNaN,
@@ -73,177 +50,222 @@ function harness(settings) {
   vm.createContext(context);
   vm.runInContext(script, context);
 
-  const api = {
+  context.onHomeyReady({
     ready() { },
     on() { },
     getSettings: () => settings || {},
-    api: () => Promise.resolve(null),
-    popup(url) { opened.push(url); return Promise.resolve(); },
-    hapticFeedback() { haptics.push(true); }
-  };
-  context.onHomeyReady(api);
+    api: () => Promise.resolve(null)
+  });
 
   return {
     nodes,
-    opened,
-    haptics,
     adopt: context.adopt,
-    tap: () => listeners['delivery:click']()
+    headline: () => [nodes.pre, nodes.value, nodes.unit].filter(node => !node.hidden && node.textContent).map(node => node.textContent).join(' '),
+    detail: () => [nodes.when.textContent, nodes.what.textContent].filter(Boolean).join(' · ')
   };
 }
 
-function state(stored, extra) {
-  const derived = deriveDeliveryState(stored);
+// What the app hands the widget, with its formatting stood in for: the times
+// and days are Homey's business and tested where they are made.
+function payload(stored, extra) {
+  const derived = deriveDeliveryState(Object.assign({ checkedAt: stored.now }, stored));
+  const cart = derived.cart;
 
-  return Object.assign(derived, {
+  return Object.assign({
+    state: derived.state,
     now: stored.now,
-    windowStart: derived.etaStart ? '16:11' : '',
-    windowEnd: derived.etaEnd ? '16:31' : '',
-    deliveredTime: derived.deliveredAt ? '16:18' : '',
+    countdownTo: derived.countdownTo,
+    progress: derived.progress,
     day: derived.etaStart || derived.deliveredAt ? 'today' : '',
-    cutOffTime: derived.cutOffAt ? '14:00' : '',
-    price: 52.5,
-    cart: null,
-    popupUrl: 'https://picnic.app',
+    window: derived.etaStart ? '16:11–16:31' : '',
+    deliveredTime: derived.deliveredAt ? '16:18' : '',
+    cutOffAt: derived.cutOffAt,
+    cutOffLabel: derived.cutOffAt ? 'today 23:00' : '',
+    price: ['ordered', 'announced', 'arriving', 'overdue', 'delivered'].indexOf(derived.state) != -1 ? 52.5 : null,
+    deposit: derived.delivery ? {
+      returned: derived.delivery.depositReturned,
+      containers: derived.delivery.returned.map(container => ({ name: container.name, quantity: container.quantity }))
+    } : null,
+    cart: cart ? {
+      totalPrice: cart.totalPrice,
+      productCount: cart.productCount,
+      minimumShort: cart.minimumShort,
+      slotChosen: cart.slotChosen,
+      slot: cart.slot ? { day: 'Sat 20 Sep', window: '18:15–19:15', cutOffAt: cart.slot.cutOffAt, cutOffLabel: 'Fri 19 Sep 23:00' } : null
+    } : null,
+    cartKnown: derived.cartKnown,
+    checkedLabel: derived.checkedAt ? 'Sun 5 Apr 08:00' : '',
+    locale: 'en-US',
     labels: LABELS
   }, extra);
 }
 
 const WINDOW = { etaStart: '2026-07-28T16:11:00.000+02:00', etaEnd: '2026-07-28T16:31:00.000+02:00' };
+const ANNOUNCED = Object.assign({ orderStatus: 'delivery_announced', announcedAt: '2026-07-28T15:41:00.000+02:00' }, WINDOW);
+
+function cart(extra) {
+  return Object.assign({
+    totalPrice: 22.03,
+    productCount: 9,
+    minimumOrderValue: 15,
+    slot: { chosen: true, windowStart: '2026-07-30T18:15:00.000+02:00', windowEnd: '2026-07-30T19:15:00.000+02:00', cutOffAt: '2026-07-29T23:00:00.000+02:00' }
+  }, extra);
+}
 
 test('an announced delivery counts the minutes down and fills the bar', () => {
-  const { nodes, adopt } = harness();
+  const { nodes, adopt, headline, detail } = harness();
 
-  adopt(state(Object.assign({
-    orderStatus: 'delivery_announced',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    now: '2026-07-28T15:56:00.000+02:00'
-  }, WINDOW)));
+  adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
 
-  assert.strictEqual(nodes.state.textContent, 'On its way');
-  assert.strictEqual(nodes.headline.textContent, 'in 15 min');
-  assert.strictEqual(nodes.detail.textContent, 'today · 16:11 – 16:31');
+  assert.strictEqual(nodes.tile.dataset.tone, 'brand');
+  assert.strictEqual(nodes.badge.dataset.icon, 'truck');
+  assert.strictEqual(nodes.status.textContent, 'On its way');
+  assert.strictEqual(headline(), 'in 15 min');
+  assert.strictEqual(detail(), 'today · 16:11–16:31');
   assert.strictEqual(nodes.track.hidden, false);
   assert.strictEqual(nodes.fill.style.width, '50%');
-  assert.strictEqual(nodes.price.textContent, '€52.50');
+  assert.strictEqual(nodes.meta.textContent, '€52.50');
 });
 
 test('an order days out counts in days and shows no bar', () => {
-  const { nodes, adopt } = harness();
+  const { nodes, adopt, headline } = harness();
 
-  adopt(state({
+  adopt(payload({
     orderStatus: 'groceries_ordered',
     etaStart: '2026-07-30T16:00:00.000+02:00',
     etaEnd: '2026-07-30T17:00:00.000+02:00',
     now: '2026-07-28T16:00:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.state.textContent, 'Ordered');
-  assert.strictEqual(nodes.headline.textContent, 'in 2 days');
+  assert.strictEqual(nodes.status.textContent, 'Ordered');
+  assert.strictEqual(nodes.badge.dataset.icon, 'bag');
+  assert.strictEqual(headline(), 'in 2 days');
   assert.strictEqual(nodes.track.hidden, true);
 });
 
 test('a single minute left is not pluralised', () => {
-  const { nodes, adopt } = harness();
+  const { adopt, headline } = harness();
 
-  adopt(state(Object.assign({
-    orderStatus: 'delivery_announced',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    now: '2026-07-28T16:10:30.000+02:00'
-  }, WINDOW)));
+  adopt(payload(Object.assign({ now: '2026-07-28T16:10:30.000+02:00' }, ANNOUNCED)));
 
-  assert.strictEqual(nodes.headline.textContent, 'in 1 min');
+  assert.strictEqual(headline(), 'in 1 min');
 });
 
 test('the window itself says the groceries are arriving', () => {
-  const { nodes, adopt } = harness();
+  const { nodes, adopt, headline } = harness();
 
-  adopt(state(Object.assign({
-    orderStatus: 'delivery_announced',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    now: '2026-07-28T16:16:00.000+02:00'
-  }, WINDOW)));
+  adopt(payload(Object.assign({ now: '2026-07-28T16:16:00.000+02:00' }, ANNOUNCED)));
 
-  assert.strictEqual(nodes.state.textContent, 'Arriving');
-  assert.strictEqual(nodes.headline.textContent, 'Any minute now');
+  assert.strictEqual(nodes.status.textContent, 'Arriving');
+  assert.strictEqual(headline(), 'Any minute now');
   assert.strictEqual(nodes.fill.style.width, '25%');
 });
 
-test('a delivery that is late says so instead of counting on', () => {
-  const { nodes, adopt } = harness();
+test('a delivery that is late says so in its own colour', () => {
+  const { nodes, adopt, headline } = harness();
 
-  adopt(state(Object.assign({
-    orderStatus: 'delivery_announced',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    now: '2026-07-28T17:00:00.000+02:00'
-  }, WINDOW)));
+  adopt(payload(Object.assign({ now: '2026-07-28T17:00:00.000+02:00' }, ANNOUNCED)));
 
-  assert.strictEqual(nodes.headline.textContent, 'Later than planned');
+  assert.strictEqual(nodes.status.textContent, 'Running late');
+  assert.strictEqual(nodes.tile.dataset.tone, 'warn');
+  assert.strictEqual(headline(), 'Any minute now');
   assert.strictEqual(nodes.fill.style.width, '100%');
 });
 
-test('delivered groceries show the moment they arrived', () => {
-  const { nodes, adopt } = harness();
+test('delivered groceries show the moment they arrived and what they cost', () => {
+  const { nodes, adopt, headline, detail } = harness();
 
-  adopt(state({
+  adopt(payload({ orderStatus: 'groceries_delivered', deliveredAt: '2026-07-28T16:18:00.000+02:00', now: '2026-07-28T16:40:00.000+02:00' }));
+
+  assert.strictEqual(nodes.status.textContent, 'Delivered');
+  assert.strictEqual(nodes.tile.dataset.tone, 'good');
+  assert.strictEqual(headline(), 'at 16:18');
+  assert.strictEqual(detail(), 'today');
+  assert.strictEqual(nodes.meta.textContent, '€52.50');
+  assert.strictEqual(nodes.note.hidden, true);
+});
+
+test('deposit that came back is shown with the delivery', () => {
+  const { nodes, adopt, detail } = harness();
+
+  adopt(payload({
     orderStatus: 'groceries_delivered',
     deliveredAt: '2026-07-28T16:18:00.000+02:00',
+    delivery: { totalPrice: 22.03, depositReturned: 4.8, returned: [{ name: 'Bottles', quantity: 6, amount: 0.9 }, { name: 'Crates', quantity: 1, amount: 3.9 }] },
     now: '2026-07-28T16:40:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.state.textContent, 'Delivered');
-  assert.strictEqual(nodes.headline.textContent, '16:18');
-  assert.strictEqual(nodes.detail.textContent, 'today');
-  // the price belongs to the order that was just delivered, so it stays until
-  // the order itself drops off the widget
-  assert.strictEqual(nodes.price.textContent, '€52.50');
+  assert.strictEqual(detail(), 'today · 6× Bottles, 1× Crates');
+  assert.strictEqual(nodes.note.textContent, '+€4.80 deposit back');
+  assert.strictEqual(nodes.note.dataset.tone, 'good');
 });
 
-test('nothing planned hides the order line entirely', () => {
-  const { nodes, adopt } = harness();
+test('four hours after the delivery the widget has moved on', () => {
+  const { nodes, adopt, headline, detail } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T16:40:00.000+02:00' }));
+  adopt(payload({ orderStatus: 'groceries_delivered', deliveredAt: '2026-07-28T12:00:00.000+02:00', now: '2026-07-28T16:01:00.000+02:00' }, { cartKnown: true }));
 
-  assert.strictEqual(nodes.top.hidden, true);
-  assert.strictEqual(nodes.headline.textContent, 'No delivery planned');
-  assert.strictEqual(nodes.headline.dataset.kind, 'message');
-  assert.strictEqual(nodes.track.hidden, true);
+  assert.strictEqual(nodes.status.textContent, '');
+  assert.strictEqual(headline(), 'Nothing planned');
+  assert.strictEqual(detail(), 'Your cart is empty');
+  assert.strictEqual(nodes.meta.textContent, '');
+});
+
+test('nothing planned and nothing known about the cart says only the first', () => {
+  const { adopt, detail, nodes } = harness();
+
+  adopt(payload({ orderStatus: '', now: '2026-07-28T16:40:00.000+02:00' }));
+
+  assert.strictEqual(detail(), '');
+  assert.strictEqual(nodes.detail.hidden, true);
+  assert.strictEqual(nodes.tile.dataset.tone, 'muted');
 });
 
 test('an app that cannot reach Picnic asks for a sign in', () => {
-  const { nodes, adopt } = harness();
+  const { adopt, headline, nodes } = harness();
 
-  adopt(state({ orderStatus: 'delivery_announced', signInNeeded: true, now: '2026-07-28T16:40:00.000+02:00' }));
+  adopt(payload(Object.assign({ signInNeeded: true, now: '2026-07-28T16:40:00.000+02:00' }, ANNOUNCED)));
 
-  assert.strictEqual(nodes.headline.textContent, 'Sign in on the Picnic app settings page');
+  assert.strictEqual(headline(), 'Sign in again');
+  assert.strictEqual(nodes.badge.dataset.icon, 'alert');
 });
 
-test('the price can be turned off', () => {
-  const { nodes, adopt } = harness({ show_price: false });
+test('an order Picnic has not confirmed in months is not retold as late', () => {
+  const { nodes, adopt, headline, detail } = harness();
 
-  adopt(state(Object.assign({
-    orderStatus: 'delivery_announced',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    now: '2026-07-28T15:56:00.000+02:00'
-  }, WINDOW)));
+  adopt(payload(Object.assign({}, ANNOUNCED, {
+    etaStart: '2026-04-05T09:04:00.000+02:00',
+    etaEnd: '2026-04-05T09:24:00.000+02:00',
+    checkedAt: '2026-04-05T08:00:00.000+02:00',
+    now: '2026-09-17T11:42:00.000+02:00'
+  })));
 
-  assert.strictEqual(nodes.price.hidden, true);
+  assert.strictEqual(headline(), 'No recent word from Picnic');
+  assert.strictEqual(detail(), 'Last updated Sun 5 Apr 08:00');
+  assert.strictEqual(nodes.meta.textContent, '');
+  assert.strictEqual(nodes.track.hidden, true);
+});
+
+test('amounts can be turned off', () => {
+  const { nodes, adopt, headline } = harness({ show_price: false });
+
+  adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
+  assert.strictEqual(nodes.meta.textContent, '');
+
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
+  assert.strictEqual(headline(), '9 products');
 });
 
 test('a clock that runs ahead of Homey does not count down to the wrong minute', () => {
-  const { nodes, adopt } = harness();
+  const { adopt, headline } = harness();
   const realNow = Date.now;
   // the dashboard is showing on something four minutes fast
   Date.now = () => realNow() + 4 * 60 * 1000;
 
   try {
-    adopt(state(Object.assign({
-      orderStatus: 'delivery_announced',
-      announcedAt: '2026-07-28T15:41:00.000+02:00',
-      now: '2026-07-28T15:56:00.000+02:00'
-    }, WINDOW)));
+    adopt(payload(Object.assign({ now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
 
-    assert.strictEqual(nodes.headline.textContent, 'in 15 min');
+    assert.strictEqual(headline(), 'in 15 min');
   } finally {
     Date.now = realNow;
   }
@@ -252,7 +274,7 @@ test('a clock that runs ahead of Homey does not count down to the wrong minute',
 test('an order that can still be added to says until when', () => {
   const { nodes, adopt } = harness();
 
-  adopt(state({
+  adopt(payload({
     orderStatus: 'groceries_ordered',
     etaStart: '2026-07-28T16:00:00.000+02:00',
     etaEnd: '2026-07-28T17:00:00.000+02:00',
@@ -260,15 +282,15 @@ test('an order that can still be added to says until when', () => {
     now: '2026-07-28T10:00:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.footnote.hidden, false);
-  assert.strictEqual(nodes.footnote.textContent, 'Add until 14:00');
-  assert.strictEqual(nodes.footnote.dataset.urgent, 'false');
+  assert.strictEqual(nodes.note.hidden, false);
+  assert.strictEqual(nodes.note.textContent, 'Add until today 23:00');
+  assert.strictEqual(nodes.note.dataset.tone, '');
 });
 
 test('the last hour before an order closes is counted down and called out', () => {
   const { nodes, adopt } = harness();
 
-  adopt(state({
+  adopt(payload({
     orderStatus: 'groceries_ordered',
     etaStart: '2026-07-28T16:00:00.000+02:00',
     etaEnd: '2026-07-28T17:00:00.000+02:00',
@@ -276,14 +298,14 @@ test('the last hour before an order closes is counted down and called out', () =
     now: '2026-07-28T13:35:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.footnote.textContent, '25 min left to add');
-  assert.strictEqual(nodes.footnote.dataset.urgent, 'true');
+  assert.strictEqual(nodes.note.textContent, '25 min left to add');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
 test('a cut off that has passed has nothing left to say', () => {
   const { nodes, adopt } = harness();
 
-  adopt(state({
+  adopt(payload({
     orderStatus: 'groceries_ordered',
     etaStart: '2026-07-28T16:00:00.000+02:00',
     etaEnd: '2026-07-28T17:00:00.000+02:00',
@@ -291,99 +313,102 @@ test('a cut off that has passed has nothing left to say', () => {
     now: '2026-07-28T14:30:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.footnote.hidden, true);
-  assert.strictEqual(nodes.footnote.textContent, '');
+  assert.strictEqual(nodes.note.hidden, true);
+  assert.strictEqual(nodes.note.textContent, '');
 });
 
-test('with nothing planned the cart is what the widget has to say', () => {
-  const { nodes, adopt } = harness();
+test('a cart while an order is open is what still has to go onto that order', () => {
+  const { nodes, adopt, headline } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T10:00:00.000+02:00' }, {
-    cart: { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35 }
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-07-28T16:00:00.000+02:00',
+    etaEnd: '2026-07-28T17:00:00.000+02:00',
+    cutOffAt: '2026-07-27T23:00:00.000+02:00',
+    cart: cart({ totalPrice: 12.4, productCount: 3 }),
+    now: '2026-07-27T19:00:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.top.hidden, false);
-  assert.strictEqual(nodes.state.textContent, 'In your cart');
-  assert.strictEqual(nodes.headline.textContent, '€43.20');
-  assert.strictEqual(nodes.detail.textContent, '12 products');
-  assert.strictEqual(nodes.footnote.hidden, true);
-  // the price of the last order would read as the price of this cart
-  assert.strictEqual(nodes.price.hidden, true);
+  // the delivery is still the headline, the things not on it yet the note
+  assert.strictEqual(headline(), 'in 21 hours');
+  assert.strictEqual(nodes.note.textContent, '€12.40 still to add, until today 23:00');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
-test('a cart below the minimum says how much is missing', () => {
+test('the last hour to add to an open order counts down next to the amount', () => {
   const { nodes, adopt } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T10:00:00.000+02:00' }, {
-    cart: { totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-07-28T16:00:00.000+02:00',
+    etaEnd: '2026-07-28T17:00:00.000+02:00',
+    cutOffAt: '2026-07-27T23:00:00.000+02:00',
+    cart: cart({ totalPrice: 12.4, productCount: 3 }),
+    now: '2026-07-27T22:35:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.detail.textContent, '1 product');
-  assert.strictEqual(nodes.footnote.textContent, '€6.80 to the minimum');
-  assert.strictEqual(nodes.footnote.dataset.urgent, 'true');
+  assert.strictEqual(nodes.note.textContent, '€12.40 still to add, 25 min left');
 });
 
-test('an empty cart is not worth a tile', () => {
-  const { nodes, adopt } = harness();
+test('a cart with a slot picked shows its amount, the slot and when to order by', () => {
+  const { nodes, adopt, headline, detail } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T10:00:00.000+02:00' }, {
-    cart: { totalPrice: 0, productCount: 0, minimumOrderValue: 35 }
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }));
+
+  assert.strictEqual(nodes.status.textContent, 'In your cart');
+  assert.strictEqual(nodes.badge.dataset.icon, 'cart');
+  assert.strictEqual(headline(), '€22.03');
+  assert.strictEqual(nodes.meta.textContent, '9 products');
+  assert.strictEqual(detail(), 'Sat 20 Sep · 18:15–19:15');
+  assert.strictEqual(nodes.note.textContent, 'Order before Fri 19 Sep 23:00');
+});
+
+test('a cart without a picked slot says none was picked, rather than naming Picnic\'s guess', () => {
+  const { adopt, detail } = harness();
+
+  adopt(payload({
+    orderStatus: '',
+    cart: cart({ slot: { chosen: false, windowStart: '2026-07-28T18:15:00.000+02:00', windowEnd: '2026-07-28T19:15:00.000+02:00' } }),
+    now: '2026-07-28T10:00:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.headline.textContent, 'No delivery planned');
-  assert.strictEqual(nodes.top.hidden, true);
+  assert.strictEqual(detail(), 'No delivery slot picked');
 });
 
-test('a cart Picnic answered with something unreadable changes nothing', () => {
+test('a cart below the minimum says how much is missing before anything else', () => {
   const { nodes, adopt } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T10:00:00.000+02:00' }, {
-    cart: { totalPrice: null, productCount: null, minimumOrderValue: null }
-  }));
+  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-28T10:00:00.000+02:00' }));
 
-  assert.strictEqual(nodes.headline.textContent, 'No delivery planned');
+  assert.strictEqual(nodes.meta.textContent, '1 product');
+  assert.strictEqual(nodes.note.textContent, '€6.80 short of the minimum');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
-test('the cart stays out of the way of a delivery that is coming', () => {
+test('the last hour to order a picked slot is counted down', () => {
   const { nodes, adopt } = harness();
 
-  adopt(state({
-    orderStatus: 'delivery_announced',
-    etaStart: '2026-07-28T16:11:00.000+02:00',
-    etaEnd: '2026-07-28T16:31:00.000+02:00',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    now: '2026-07-28T15:56:00.000+02:00'
-  }, { cart: { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35 } }));
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-29T22:20:00.000+02:00' }));
 
-  assert.strictEqual(nodes.state.textContent, 'On its way');
-  assert.strictEqual(nodes.headline.textContent, 'in 15 min');
+  assert.strictEqual(nodes.note.textContent, 'Order within 40 min');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
-test('tapping the widget opens Picnic, with a buzz to say it was noticed', () => {
-  const { adopt, tap, opened, haptics } = harness();
+test('a cart that can no longer be added to an order is not held over the reader', () => {
+  const { nodes, adopt, headline } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T10:00:00.000+02:00' }));
-  tap();
+  adopt(payload(Object.assign({ cutOffAt: '2026-07-27T23:00:00.000+02:00', cart: cart(), now: '2026-07-28T15:56:00.000+02:00' }, ANNOUNCED)));
 
-  assert.deepStrictEqual(opened, ['https://picnic.app']);
-  assert.strictEqual(haptics.length, 1);
+  assert.strictEqual(headline(), 'in 15 min');
+  assert.strictEqual(nodes.note.hidden, true);
 });
 
-test('tapping does nothing when that was turned off', () => {
-  const { adopt, tap, opened } = harness({ open_on_tap: false });
+test('amounts are written in Homey\'s language', () => {
+  const { adopt, headline } = harness();
 
-  adopt(state({ orderStatus: '', now: '2026-07-28T10:00:00.000+02:00' }));
-  tap();
+  adopt(payload({ orderStatus: '', cart: cart(), now: '2026-07-28T10:00:00.000+02:00' }, { locale: 'nl' }));
 
-  assert.deepStrictEqual(opened, []);
-});
-
-test('a tap before the first state has arrived is not a tap into nothing', () => {
-  const { tap, opened } = harness();
-
-  tap();
-
-  assert.deepStrictEqual(opened, []);
+  assert.strictEqual(headline(), '€ 22,03');
 });
 
 test('no countdown on the widget is ever finer than a minute', () => {
@@ -394,64 +419,6 @@ test('no countdown on the widget is ever finer than a minute', () => {
   assert.strictEqual(seconds, null);
 });
 
-test('a cart while an order is open is what still has to go onto that order', () => {
-  const { nodes, adopt } = harness();
-
-  adopt(state({
-    orderStatus: 'groceries_ordered',
-    etaStart: '2026-07-28T16:00:00.000+02:00',
-    etaEnd: '2026-07-28T17:00:00.000+02:00',
-    cutOffAt: '2026-07-27T23:00:00.000+02:00',
-    now: '2026-07-27T19:00:00.000+02:00'
-  }, { cart: { totalPrice: 12.4, productCount: 3, minimumOrderValue: 35 }, cutOffTime: '23:00' }));
-
-  // the delivery is still the headline, the things not on it yet the footnote
-  assert.strictEqual(nodes.headline.textContent, 'in 21 hours');
-  assert.strictEqual(nodes.footnote.textContent, '€12.40 not ordered yet, until 23:00');
-  assert.strictEqual(nodes.footnote.dataset.urgent, 'true');
-});
-
-test('the last hour to add to an open order counts down next to the amount', () => {
-  const { nodes, adopt } = harness();
-
-  adopt(state({
-    orderStatus: 'groceries_ordered',
-    etaStart: '2026-07-28T16:00:00.000+02:00',
-    etaEnd: '2026-07-28T17:00:00.000+02:00',
-    cutOffAt: '2026-07-27T23:00:00.000+02:00',
-    now: '2026-07-27T22:35:00.000+02:00'
-  }, { cart: { totalPrice: 12.4, productCount: 3, minimumOrderValue: 35 }, cutOffTime: '23:00' }));
-
-  assert.strictEqual(nodes.footnote.textContent, '€12.40 not ordered yet, 25 min left');
-});
-
-test('an empty cart while an order is open leaves the deadline to speak for itself', () => {
-  const { nodes, adopt } = harness();
-
-  adopt(state({
-    orderStatus: 'groceries_ordered',
-    etaStart: '2026-07-28T16:00:00.000+02:00',
-    etaEnd: '2026-07-28T17:00:00.000+02:00',
-    cutOffAt: '2026-07-27T23:00:00.000+02:00',
-    now: '2026-07-27T19:00:00.000+02:00'
-  }, { cart: { totalPrice: 0, productCount: 0, minimumOrderValue: 35 }, cutOffTime: '23:00' }));
-
-  assert.strictEqual(nodes.footnote.textContent, 'Add until 23:00');
-  assert.strictEqual(nodes.footnote.dataset.urgent, 'false');
-});
-
-test('a cart that can no longer be added to an order is not held over the reader', () => {
-  const { nodes, adopt } = harness();
-
-  adopt(state({
-    orderStatus: 'delivery_announced',
-    etaStart: '2026-07-28T16:11:00.000+02:00',
-    etaEnd: '2026-07-28T16:31:00.000+02:00',
-    announcedAt: '2026-07-28T15:41:00.000+02:00',
-    cutOffAt: '2026-07-27T23:00:00.000+02:00',
-    now: '2026-07-28T15:56:00.000+02:00'
-  }, { cart: { totalPrice: 12.4, productCount: 3, minimumOrderValue: 35 } }));
-
-  assert.strictEqual(nodes.headline.textContent, 'in 15 min');
-  assert.strictEqual(nodes.footnote.hidden, true);
+test('the widget no longer does anything when tapped', () => {
+  assert.strictEqual(/popup|hapticFeedback|addEventListener\('click'/.test(script), false);
 });

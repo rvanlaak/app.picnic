@@ -5,125 +5,249 @@
   <meta charset="utf-8" />
   <style>
     /*
-     * Sizes and spacing come from Homey's own style library so the widget sits
-     * on a dashboard next to the built-in ones without looking imported, with
-     * fallbacks for every variable: a missing one would otherwise collapse the
-     * layout rather than merely change it. Everything is sized in em so that
-     * Homey's font scale setting takes the whole widget with it.
+     * Sizes, colours and spacing come from Homey's widget style library so the
+     * widget sits on a dashboard next to the built-in ones without looking
+     * imported, and follows the dashboard into dark mode by itself. Every
+     * variable has a fallback: a missing one would otherwise collapse the
+     * layout rather than merely change it.
+     *
+     * One layout for every state, so a glance lands in the same place whatever
+     * the widget is saying: what this is about at the top, the one thing worth
+     * reading large at the bottom, with its detail and what to do about it
+     * underneath.
      */
     body {
       margin: 0;
       overflow: hidden;
     }
 
-    .delivery {
+    .tile {
       box-sizing: border-box;
       height: 100vh;
       padding: var(--homey-su-4, 16px);
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      gap: var(--homey-su-1, 4px);
+      font-variant-numeric: tabular-nums;
 
-      /* the state decides the one colour on the widget, see view() */
-      --accent: #e40613;
-      --warn: #f2a20c;
+      --brand: #e40613;
+      --warn: var(--homey-color-orange, #f2a20c);
+      --good: var(--homey-color-green, #28a05c);
+      --muted: var(--homey-text-color-light, #8a8a8a);
+      /* the one colour a state gives the widget, see STATES below */
+      --tone: var(--muted);
     }
 
-    .delivery[data-tappable="true"] {
-      cursor: pointer;
+    /* Picnic's red, lifted a little on a dark dashboard where the brand red
+       itself is too dark to read as text */
+    .homey-dark-mode .tile {
+      --brand: #ff4b52;
     }
 
-    .top {
+    .tile[data-tone="brand"] { --tone: var(--brand); }
+    .tile[data-tone="warn"] { --tone: var(--warn); }
+    .tile[data-tone="good"] { --tone: var(--good); }
+
+    .head {
       display: flex;
       align-items: center;
       gap: var(--homey-su-2, 8px);
-      margin-bottom: var(--homey-su-1, 4px);
-      min-height: 1.2em;
+      min-width: 0;
     }
 
-    .pip {
+    .badge {
       flex: none;
-      width: 0.5em;
-      height: 0.5em;
-      border-radius: 50%;
-      background: var(--accent);
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--tone);
+      background: rgba(128, 128, 128, 0.14);
+      background: color-mix(in srgb, var(--tone) 14%, transparent);
     }
 
-    .state {
-      font-weight: 600;
-      letter-spacing: 0.02em;
+    .badge svg {
+      display: none;
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .badge[data-icon="bag"] .i-bag,
+    .badge[data-icon="truck"] .i-truck,
+    .badge[data-icon="clock"] .i-clock,
+    .badge[data-icon="check"] .i-check,
+    .badge[data-icon="cart"] .i-cart,
+    .badge[data-icon="alert"] .i-alert {
+      display: block;
+    }
+
+    .status {
+      min-width: 0;
+      font-size: var(--homey-font-size-small, 14px);
+      line-height: var(--homey-line-height-small, 20px);
+      font-weight: var(--homey-font-weight-medium, 500);
+      color: var(--tone);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .price {
+    .meta {
       margin-left: auto;
       flex: none;
-      opacity: 0.6;
+      font-size: var(--homey-font-size-small, 14px);
+      line-height: var(--homey-line-height-small, 20px);
+      color: var(--muted);
     }
 
+    .body {
+      margin-top: auto;
+      min-width: 0;
+    }
+
+    /* A number is read at a glance, so it is the large thing on the widget
+       and the words around it ("in", "min") are set small beside it. It grows
+       with the width of the tile: a full width widget has room to spare. */
     .headline {
-      font-size: 1.75em;
-      line-height: 1.15;
-      /* a countdown is read at a glance, a sentence is read; both have to fit */
+      display: flex;
+      align-items: baseline;
+      gap: 0.3em;
+      min-width: 0;
+      color: var(--homey-text-color, inherit);
+      white-space: nowrap;
       overflow: hidden;
     }
 
-    .headline[data-kind="message"] {
-      font-size: 1.1em;
-      line-height: 1.3;
-    }
-
-    .detail {
-      opacity: 0.6;
+    .value {
+      font-size: clamp(30px, 11vw, 40px);
+      line-height: 1.1;
+      font-weight: var(--homey-font-weight-bold, 700);
+      letter-spacing: -0.02em;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .pre,
+    .unit {
+      flex: none;
+      font-size: var(--homey-font-size-default, 17px);
+      font-weight: var(--homey-font-weight-medium, 500);
+      color: var(--muted);
+    }
+
+    /* a sentence is read rather than glanced at, and may take two lines */
+    .headline[data-kind="message"] .value {
+      font-size: var(--homey-font-size-large, 20px);
+      line-height: 24px;
+      letter-spacing: 0;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .detail,
+    .note {
+      font-size: var(--homey-font-size-small, 14px);
+      line-height: var(--homey-line-height-small, 20px);
+      color: var(--muted);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* when and at what time, next to each other where there is room for it */
+    .when:not(:empty) + .what:not(:empty)::before {
+      content: " · ";
     }
 
     .track {
       position: relative;
       margin-top: var(--homey-su-3, 12px);
-      height: 4px;
-      border-radius: 2px;
+      height: 6px;
+      border-radius: 3px;
       overflow: hidden;
     }
 
-    /* the faint part of the bar is drawn behind the fill rather than under it:
-       an opacity on the track would take the fill inside it down with it. It
-       is tied to the text colour, which is the one thing that already follows
-       the theme the dashboard is in. */
+    /* the empty part of the bar is drawn behind the fill rather than under
+       it: an opacity on the track would take the fill inside it down with it */
     .track::before {
       content: "";
       position: absolute;
       inset: 0;
       background: currentColor;
-      opacity: 0.15;
+      opacity: 0.12;
     }
 
     .fill {
       position: relative;
       height: 100%;
       border-radius: inherit;
-      background: var(--accent);
+      background: var(--tone);
       transition: width 0.4s ease-out;
     }
 
-    .footnote {
+    .note {
       margin-top: var(--homey-su-2, 8px);
-      opacity: 0.6;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
-    /* the last minutes before the order closes are the one thing on here worth
-       hurrying for, so they are the one thing that is not grey */
-    .footnote[data-urgent="true"] {
-      color: var(--warn);
-      opacity: 1;
+    .note[data-tone="warn"],
+    .note[data-tone="good"] {
+      font-weight: var(--homey-font-weight-medium, 500);
+    }
+
+    .note[data-tone="warn"] { color: var(--warn); }
+    .note[data-tone="good"] { color: var(--good); }
+
+    /* A half width tile on a phone has room for one thing per line, so the
+       amount next to the status makes way for the status itself. */
+    @media (max-width: 239px) {
+      .meta {
+        display: none;
+      }
+
+      .head {
+        gap: 6px;
+      }
+
+      .badge {
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+      }
+
+      .badge svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* and where there is not, underneath each other */
+      .detail {
+        white-space: normal;
+      }
+
+      .detail span {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .when:not(:empty) + .what:not(:empty)::before {
+        content: none;
+      }
+
+      .note {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
     }
 
     [hidden] {
@@ -132,22 +256,31 @@
   </style>
 </head>
 
-<body class="homey-widget">
-  <div class="delivery" id="delivery">
-    <div class="top" id="top">
-      <span class="pip"></span>
-      <span class="state homey-text-small" id="state"></span>
-      <span class="price homey-text-small" id="price" hidden></span>
+<body class="homey-widget-full">
+  <div class="tile" id="tile">
+    <div class="head">
+      <span class="badge" id="badge" aria-hidden="true">
+        <svg class="i-bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>
+        <svg class="i-truck" viewBox="0 0 24 24"><path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>
+        <svg class="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+        <svg class="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
+        <svg class="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+        <svg class="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
+      </span>
+      <span class="status" id="status"></span>
+      <span class="meta" id="meta"></span>
     </div>
 
-    <div class="headline homey-text-bold" id="headline" aria-live="polite"></div>
-    <div class="detail homey-text-small" id="detail"></div>
+    <div class="body">
+      <div class="headline" id="headline" aria-live="polite"><span class="pre" id="pre"></span><span class="value" id="value"></span><span class="unit" id="unit"></span></div>
+      <div class="detail" id="detail"><span class="when" id="when"></span><span class="what" id="what"></span></div>
 
-    <div class="track" id="track" hidden>
-      <div class="fill" id="fill"></div>
+      <div class="track" id="track" hidden>
+        <div class="fill" id="fill"></div>
+      </div>
+
+      <div class="note" id="note" hidden></div>
     </div>
-
-    <div class="footnote homey-text-small" id="footnote" hidden></div>
   </div>
 
   <script type="text/javascript">
@@ -161,20 +294,22 @@
     // minute it shows is never noticeably behind the minute it is.
     var TICK_INTERVAL = 20 * 1000;
 
-    // Below this, the cut off is close enough to hurry for and is counted down
-    // in minutes rather than named as a time.
-    var CUT_OFF_URGENT_MINUTES = 60;
+    // Below this, a deadline is close enough to hurry for and is counted down
+    // in minutes rather than named as a moment.
+    var URGENT_MINUTES = 60;
 
-    // What each state colours the widget, and whether its headline is a
-    // countdown or something to read.
+    // What each state looks like: its colour, its icon and what it is called
+    // at the top. The words themselves come from the app.
     var STATES = {
-      'ordered': { accent: '#e40613', chip: 'ordered', kind: 'countdown' },
-      'announced': { accent: '#e40613', chip: 'announced', kind: 'countdown' },
-      'arriving': { accent: '#e40613', chip: 'arriving', kind: 'message' },
-      'overdue': { accent: '#f2a20c', chip: 'arriving', kind: 'message' },
-      'delivered': { accent: '#28a05c', chip: 'delivered', kind: 'countdown' },
-      'idle': { accent: 'currentColor', chip: null, kind: 'message' },
-      'signed_out': { accent: '#f2a20c', chip: null, kind: 'message' }
+      'ordered': { tone: 'brand', icon: 'bag', status: 'ordered' },
+      'announced': { tone: 'brand', icon: 'truck', status: 'announced' },
+      'arriving': { tone: 'brand', icon: 'truck', status: 'arriving' },
+      'overdue': { tone: 'warn', icon: 'clock', status: 'overdue' },
+      'delivered': { tone: 'good', icon: 'check', status: 'delivered' },
+      'cart': { tone: 'brand', icon: 'cart', status: 'cart' },
+      'empty': { tone: 'muted', icon: 'cart', status: null },
+      'signed_out': { tone: 'warn', icon: 'alert', status: null },
+      'stale': { tone: 'warn', icon: 'alert', status: null }
     };
 
     var homey = null;
@@ -197,9 +332,6 @@
       // the app announces a new state as soon as it has one, which is what
       // makes an announcement show up on the dashboard while you look at it
       Homey.on('delivery_state', adopt);
-
-      element('delivery').dataset.tappable = settings['open_on_tap'] === false ? 'false' : 'true';
-      element('delivery').addEventListener('click', tap);
 
       var shown = false;
       var show = function () {
@@ -234,23 +366,6 @@
       render();
     }
 
-    // Tapping the widget opens Picnic, which is what someone who just read
-    // that the order closes in twenty minutes wants next.
-    function tap() {
-      if (settings['open_on_tap'] === false) return;
-      if (state === null || !state['popupUrl']) return;
-
-      try {
-        // only allowed in the moment right after a touch, and only on newer
-        // firmware, so a runtime without it must not take the tap with it
-        homey.hapticFeedback();
-      } catch (exception) {
-        console.error(exception);
-      }
-
-      Promise.resolve(homey.popup(state['popupUrl'])).catch(console.error);
-    }
-
     // The widget's idea of what time it is, which is Homey's.
     function now() {
       return Date.now() + clockOffset;
@@ -261,8 +376,8 @@
     }
 
     // The labels arrive as sentences with __n__, __t__ and __a__ in them,
-    // because the number, the time or the amount to put in is only known here:
-    // the app is not asked anything while the minutes tick away.
+    // because the number, the moment or the amount to put in is only known
+    // here: the app is not asked anything while the minutes tick away.
     function text(key, values) {
       var filled = label(key);
 
@@ -273,198 +388,224 @@
       return filled;
     }
 
+    function isAmount(value) {
+      return typeof value == 'number' && isFinite(value);
+    }
+
     function money(amount) {
       try {
-        return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' }).format(amount);
+        return new Intl.NumberFormat((state && state['locale']) || undefined, { style: 'currency', currency: 'EUR' }).format(amount);
       } catch (exception) {
         return '€ ' + amount.toFixed(2);
       }
     }
 
-    // How long is left, in the largest unit that still says something useful.
-    // Minutes are rounded up so that a delivery does not arrive "in 0 min",
-    // and are the smallest unit on here: a dashboard is read in passing, and
-    // seconds ticking away would be movement without information.
-    function remaining(target) {
+    function showPrices() {
+      return settings['show_price'] !== false;
+    }
+
+    function products(count) {
+      return isAmount(count) && count > 0 ? text(count == 1 ? 'item' : 'items', { n: count }) : '';
+    }
+
+    // Minutes until a moment, rounded up so nothing happens "in 0 min", or
+    // null once it has passed.
+    function minutesUntil(target) {
       var left = Date.parse(target) - now();
-      if (isNaN(left) || left <= 0) return label('now');
-
-      var minutes = Math.ceil(left / 60000);
-      if (minutes < 60) return text(minutes == 1 ? 'minute' : 'minutes', { n: minutes });
-
-      var hours = Math.round(left / 3600000);
-      if (hours < 24) return text(hours == 1 ? 'hour' : 'hours', { n: hours });
-
-      var days = Math.round(left / 86400000);
-      return text(days == 1 ? 'day' : 'days', { n: days });
-    }
-
-    function windowText(data) {
-      if (!data['windowStart'] || !data['windowEnd']) return data['windowStart'] || '';
-      return data['windowStart'] + ' – ' + data['windowEnd'];
-    }
-
-    function price(data) {
-      if (settings['show_price'] === false) return '';
-
-      var amount = data['price'];
-      if (typeof amount != 'number' || !isFinite(amount) || amount <= 0) return '';
-
-      return money(amount);
-    }
-
-    // The one thing on the widget that can still be acted on: Picnic keeps an
-    // order open until the slot's cut off moment. Hours away that is a time to
-    // remember, minutes away it is something to hurry for, and once it has
-    // passed there is nothing left to say about it.
-    function minutesToCutOff(data) {
-      if (!data['cutOffAt']) return null;
-
-      var left = Date.parse(data['cutOffAt']) - now();
       if (isNaN(left) || left <= 0) return null;
-
       return Math.ceil(left / 60000);
     }
 
-    function cutOff(data) {
-      var minutes = minutesToCutOff(data);
+    // How long is left, in the largest unit that still says something useful,
+    // as the number and the words around it. Minutes are the smallest unit on
+    // here: a dashboard is read in passing, and seconds ticking away would be
+    // movement without information.
+    function remaining(target) {
+      var minutes = minutesUntil(target);
+      if (minutes === null) return { value: label('now'), kind: 'message' };
+
+      var left = Date.parse(target) - now();
+      var hours = Math.round(left / 3600000);
+      var days = Math.round(left / 86400000);
+
+      var amount = minutes < 60 ? minutes : (hours < 24 ? hours : days);
+      var unit = minutes < 60 ? 'minute' : (hours < 24 ? 'hour' : 'day');
+
+      return { pre: label('in'), value: String(amount), unit: label(amount == 1 ? unit : unit + 's'), kind: 'countdown' };
+    }
+
+    // A deadline: named while it is hours away, counted down and called out
+    // over its last hour, and gone once it has passed.
+    function deadline(at, moment, atKey, inKey, values) {
+      var minutes = minutesUntil(at);
       if (minutes === null) return null;
 
-      if (minutes <= CUT_OFF_URGENT_MINUTES) return { text: text('cut-off-in', { n: minutes }), urgent: true };
-
-      return { text: text('cut-off-at', { t: data['cutOffTime'] }), urgent: false };
-    }
-
-    // Something in the cart while an order is open is something that still has
-    // to be put on that order, and can only be until the order closes. That is
-    // a thing left undone with a deadline on it, so it says so in place of the
-    // deadline on its own.
-    function stillToOrder(data, cart) {
-      if (cart === null) return null;
-
-      var minutes = minutesToCutOff(data);
-      if (minutes === null) return null;
-
-      return {
-        text: minutes <= CUT_OFF_URGENT_MINUTES
-          ? text('to-order-in', { a: cart.headline, n: minutes })
-          : text('to-order-at', { a: cart.headline, t: data['cutOffTime'] }),
-        urgent: true
-      };
-    }
-
-    // With no delivery to report, the cart is what the widget has to say. An
-    // empty one is not worth a tile, and a response this version cannot read
-    // leaves it as it was: saying nothing is planned, which is true.
-    function cartLines(data) {
-      var cart = data['cart'];
-      if (!cart) return null;
-
-      var total = cart['totalPrice'];
-      if (typeof total != 'number' || !isFinite(total) || total <= 0) return null;
-
-      var products = cart['productCount'];
-      var minimum = cart['minimumOrderValue'];
-      var short = typeof minimum == 'number' && isFinite(minimum) && total < minimum ? minimum - total : null;
-
-      return {
-        chip: label('cart'),
-        headline: money(total),
-        detail: typeof products == 'number' && products > 0 ? text(products == 1 ? 'item' : 'items', { n: products }) : '',
-        footnote: short === null ? null : { text: text('minimum', { t: money(short) }), urgent: true }
-      };
-    }
-
-    // What the headline says, and the line underneath it.
-    function lines(data) {
-      switch (data['state']) {
-        case 'ordered':
-        case 'announced':
-          return data['countdownTo']
-            ? { headline: remaining(data['countdownTo']), detail: join(data['day'], windowText(data)) }
-            : { headline: label('ordered'), detail: '', kind: 'message' };
-        case 'arriving':
-          return { headline: label('now'), detail: join(data['day'], windowText(data)) };
-        case 'overdue':
-          return { headline: label('overdue'), detail: join(data['day'], windowText(data)) };
-        case 'delivered':
-          return { headline: data['deliveredTime'], detail: data['day'] };
-        case 'signed_out':
-          return { headline: label('signed-out'), detail: '' };
-        default:
-          return { headline: label('idle'), detail: '' };
+      if (minutes <= URGENT_MINUTES) {
+        return { text: text(inKey, Object.assign({ n: minutes }, values)), tone: 'warn' };
       }
+
+      return { text: text(atKey, Object.assign({ t: moment }, values)), tone: null };
     }
 
-    function join(left, right) {
-      if (!left) return right || '';
-      if (!right) return left;
-      return left + ' · ' + right;
+    // The note under a placed order. Something in the cart while the order is
+    // still open has yet to be put on it, which is a thing left undone with a
+    // deadline on it; without a cart the deadline speaks for itself.
+    function orderNote(data) {
+      var cart = data['cart'];
+
+      if (cart && isAmount(cart['totalPrice']) && cart['totalPrice'] > 0) {
+        var open = deadline(data['cutOffAt'], data['cutOffLabel'], 'to-order-at', 'to-order-in', { a: money(cart['totalPrice']) });
+        if (open) return { text: open.text, tone: 'warn' };
+      }
+
+      return deadline(data['cutOffAt'], data['cutOffLabel'], 'cut-off-at', 'cut-off-in', {});
+    }
+
+    // What came back in deposit, once Picnic has counted it.
+    function containers(deposit) {
+      if (!deposit || !deposit['containers']) return '';
+
+      return deposit['containers']
+        .filter(function (container) { return container['name']; })
+        .map(function (container) { return container['quantity'] + '× ' + container['name']; })
+        .join(', ');
     }
 
     // Everything on screen, worked out before any of it is put there.
-    function view() {
-      var cart = cartLines(state);
+    function view(data) {
+      var look = STATES[data['state']] || STATES['empty'];
+      var price = showPrices() && isAmount(data['price']) && data['price'] > 0 ? money(data['price']) : '';
 
-      // with nothing planned the cart is all the widget has to say; with a
-      // delivery on the way it is a footnote to it and never the headline
-      if (cart !== null && state['state'] == 'idle') {
-        return {
-          accent: STATES['ordered'].accent,
-          chip: cart.chip,
-          kind: 'countdown',
-          headline: cart.headline,
-          detail: cart.detail,
-          // the price of the last order says nothing about the cart in front
-          // of it, and two amounts next to each other would invite reading one
-          // as the other
-          price: '',
-          progress: null,
-          footnote: cart.footnote
-        };
+      var shown = {
+        tone: look.tone,
+        icon: look.icon,
+        status: look.status ? label(look.status) : '',
+        meta: '',
+        kind: 'message',
+        pre: '',
+        headline: '',
+        unit: '',
+        // the detail line: when, and what about it
+        when: '',
+        what: '',
+        progress: null,
+        note: null
+      };
+
+      switch (data['state']) {
+        case 'ordered':
+        case 'announced':
+          shown.meta = price;
+          if (data['countdownTo']) {
+            var left = remaining(data['countdownTo']);
+            shown.kind = left.kind;
+            shown.pre = left.pre || '';
+            shown.headline = left.value;
+            shown.unit = left.unit || '';
+          } else {
+            shown.headline = label('ordered');
+          }
+          shown.when = data['day'];
+          shown.what = data['window'];
+          shown.progress = data['progress'];
+          shown.note = orderNote(data);
+          break;
+
+        case 'arriving':
+        case 'overdue':
+          shown.meta = price;
+          shown.headline = label('now');
+          shown.when = data['day'];
+          shown.what = data['window'];
+          shown.progress = data['progress'];
+          break;
+
+        case 'delivered':
+          var deposit = data['deposit'];
+          shown.meta = price;
+          shown.kind = 'countdown';
+          shown.pre = label('at');
+          shown.headline = data['deliveredTime'];
+          shown.when = data['day'];
+          shown.what = containers(deposit);
+          if (deposit && isAmount(deposit['returned']) && deposit['returned'] > 0) {
+            shown.note = { text: text('deposit-returned', { t: money(deposit['returned']) }), tone: 'good' };
+          }
+          break;
+
+        case 'cart':
+          var cart = data['cart'] || {};
+          var slot = cart['slotChosen'] ? cart['slot'] : null;
+
+          shown.kind = 'countdown';
+          if (showPrices() && isAmount(cart['totalPrice'])) {
+            shown.headline = money(cart['totalPrice']);
+            shown.meta = products(cart['productCount']);
+          } else {
+            shown.headline = products(cart['productCount']);
+          }
+
+          // a slot someone picked is when this would arrive; the one Picnic
+          // suggests by itself is not held for anyone, so it is not named
+          shown.when = slot ? slot['day'] : label('no-slot');
+          shown.what = slot ? slot['window'] : '';
+
+          if (isAmount(cart['minimumShort']) && cart['minimumShort'] > 0) {
+            shown.note = { text: text('minimum', { t: money(cart['minimumShort']) }), tone: 'warn' };
+          } else if (slot) {
+            shown.note = deadline(slot['cutOffAt'], slot['cutOffLabel'], 'order-before', 'order-in', {});
+          }
+          break;
+
+        case 'signed_out':
+          shown.headline = label('signed-out');
+          shown.when = label('signed-out-detail');
+          break;
+
+        case 'stale':
+          // what the app last heard is not repeated, only when it heard it
+          shown.headline = label('stale');
+          shown.when = data['checkedLabel'] ? text('stale-since', { t: data['checkedLabel'] }) : '';
+          break;
+
+        default:
+          shown.headline = label('empty');
+          shown.when = data['cartKnown'] ? label('empty-cart') : '';
       }
 
-      var appearance = STATES[state['state']] || STATES['idle'];
-      var text = lines(state);
-
-      return {
-        accent: appearance.accent,
-        chip: appearance.chip ? label(appearance.chip) : '',
-        kind: text.kind || appearance.kind,
-        headline: text.headline,
-        detail: text.detail,
-        price: price(state),
-        progress: state['progress'],
-        footnote: stillToOrder(state, cart) || cutOff(state)
-      };
+      return shown;
     }
 
     function render() {
       if (state === null) return;
 
-      var showing = view();
+      var shown = view(state);
 
-      element('delivery').style.setProperty('--accent', showing.accent);
+      element('tile').dataset.tone = shown.tone;
+      element('badge').dataset.icon = shown.icon;
 
-      element('top').hidden = showing.chip == '';
-      element('state').textContent = showing.chip;
+      element('status').textContent = shown.status;
+      element('meta').textContent = shown.meta;
 
-      element('price').textContent = showing.price;
-      element('price').hidden = showing.price == '';
+      element('pre').textContent = shown.pre;
+      element('pre').hidden = shown.pre == '';
+      element('value').textContent = shown.headline;
+      element('unit').textContent = shown.unit;
+      element('unit').hidden = shown.unit == '';
+      element('headline').dataset.kind = shown.kind;
 
-      element('headline').textContent = showing.headline;
-      element('headline').dataset.kind = showing.kind;
+      element('when').textContent = shown.when;
+      element('what').textContent = shown.what;
+      element('detail').hidden = shown.when == '' && shown.what == '';
 
-      element('detail').textContent = showing.detail;
-
-      var progress = showing.progress;
+      var progress = shown.progress;
       var known = typeof progress == 'number' && isFinite(progress);
       element('track').hidden = !known;
       element('fill').style.width = known ? Math.round(progress * 100) + '%' : '0%';
 
-      element('footnote').textContent = showing.footnote ? showing.footnote.text : '';
-      element('footnote').dataset.urgent = showing.footnote && showing.footnote.urgent ? 'true' : 'false';
-      element('footnote').hidden = !showing.footnote;
+      element('note').textContent = shown.note ? shown.note.text : '';
+      element('note').dataset.tone = shown.note && shown.note.tone ? shown.note.tone : '';
+      element('note').hidden = !shown.note;
     }
   </script>
 </body>

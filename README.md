@@ -37,7 +37,10 @@ the wall is good at telling you: when the groceries turn up.
 - Once Picnic announces the delivery moment, the countdown is to that window
   instead, with a bar that fills between the announcement and the delivery
 - During the window it says the groceries are arriving, after it that Picnic is
-  running late, and afterwards the time they were delivered
+  running late, and afterwards the time they were delivered. Four hours later
+  the delivery makes way for whatever is in your cart by then
+- Once Picnic has counted what went back with the driver, the delivered order
+  says what came back in deposit, and in what
 - The amount of the order is shown alongside it, which can be turned off in the
   widget's settings
 - While an order can still be added to, the widget says until when. In the last
@@ -49,16 +52,18 @@ the wall is good at telling you: when the groceries turn up.
 - With nothing ordered at all, the widget shows what is in your cart and how
   many products that is, and how much is missing when that is below the
   minimum order value
-- Tapping the widget opens Picnic, which can be turned off in the widget's
-  settings
+- It also shows the delivery moment your cart is set to, and says when none has
+  been picked yet: until you pick one nothing is held for you. Once one is
+  picked, the widget says when the order has to be placed by
+- When the app has not been able to reach Picnic in over a day, the widget says
+  so and when it last heard, rather than passing off what it knew as news
 
 Nothing on the widget is ever counted down in seconds: a dashboard is read in
 passing, and the minute it arrives in is as precise as that reading gets.
 
-The widget needs Homey firmware v12.1.0 or newer, which is what Homey
-Dashboards themselves need. What could not be verified while building it, for
-lack of the SDK documentation and a Picnic account, is written down in
-[VERIFICATION.md](VERIFICATION.md).
+The widget needs Homey firmware v12.3.0 or newer, which is what the SDK
+documentation requires of an app containing a widget. What is still left to
+verify about it is written down in [VERIFICATION.md](VERIFICATION.md).
 
 ## Flow Actions
 - Adding a product to your basket based on the name of the product passed as an argument.

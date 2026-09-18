@@ -106,7 +106,7 @@ test('does not throw on a body that is not a string', () => {
 test('a cart reports what it is worth and how much is in it', () => {
   const cart = parseCart(JSON.stringify({ total_price: 4320, total_count: 12, minimum_order_value: 3500 }));
 
-  assert.deepStrictEqual(cart, { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35 });
+  assert.deepStrictEqual(cart, { totalPrice: 43.2, productCount: 12, minimumOrderValue: 35, slot: null });
 });
 
 test('a cart that does not total itself up is counted line by line', () => {
@@ -150,4 +150,44 @@ test('amounts that are not numbers leave the widget with nothing to show', () =>
 test('a cart that is not json at all is not a cart', () => {
   assert.strictEqual(parseCart("<html>nope</html>"), null);
   assert.strictEqual(parseCart(JSON.stringify([])), null);
+});
+
+const SLOTS = [
+  { slot_id: "s1", window_start: "2026-09-18T08:00:00.000+02:00", window_end: "2026-09-18T09:00:00.000+02:00", cut_off_time: "2026-09-17T13:00:00.000+02:00", minimum_order_value: 3500 },
+  { slot_id: "s2", window_start: "2026-09-19T18:15:00.000+02:00", window_end: "2026-09-19T19:15:00.000+02:00", cut_off_time: "2026-09-18T23:00:00.000+02:00", minimum_order_value: 4500 }
+];
+
+test('a slot picked in the app is the chosen delivery moment', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 2203, selected_slot: { slot_id: "s2", state: "EXPLICIT" }, delivery_slots: SLOTS }));
+
+  assert.deepStrictEqual(cart.slot, {
+    chosen: true,
+    windowStart: "2026-09-19T18:15:00.000+02:00",
+    windowEnd: "2026-09-19T19:15:00.000+02:00",
+    cutOffAt: "2026-09-18T23:00:00.000+02:00"
+  });
+  assert.strictEqual(cart.minimumOrderValue, 45);
+});
+
+test('the slot Picnic suggests by itself is not a chosen one', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 2203, selected_slot: { slot_id: "s1", state: "IMPLICIT" }, delivery_slots: SLOTS }));
+
+  assert.strictEqual(cart.slot.chosen, false);
+  assert.strictEqual(cart.minimumOrderValue, 35);
+});
+
+test('a selected slot missing from the list still says whether it was chosen', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 2203, selected_slot: { slot_id: "gone", state: "EXPLICIT" }, delivery_slots: SLOTS }));
+
+  assert.deepStrictEqual(cart.slot, { chosen: true, windowStart: null, windowEnd: null, cutOffAt: null });
+});
+
+test('the cart is worth what the checkout says it is worth', () => {
+  const cart = parseCart(JSON.stringify({ total_price: 2207, checkout_total_price: 2203, total_count: 9 }));
+
+  assert.strictEqual(cart.totalPrice, 22.03);
+});
+
+test('a cart that does not mention a checkout total is worth its total', () => {
+  assert.strictEqual(parseCart(JSON.stringify({ total_price: 2207 })).totalPrice, 22.07);
 });

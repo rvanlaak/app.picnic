@@ -8,20 +8,25 @@ const { deriveDeliveryState } = require('../lib/deliverystate.js');
 const WINDOW_START = "2026-07-28T16:00:00.000+02:00";
 const WINDOW_END = "2026-07-28T17:00:00.000+02:00";
 
+// Picnic answered the poll that wrote this down a moment ago, unless a test
+// says otherwise
 function stored(extra) {
-  return Object.assign({
+  const values = Object.assign({
     orderStatus: "delivery_announced",
     etaStart: WINDOW_START,
     etaEnd: WINDOW_END,
     announcedAt: "2026-07-28T15:00:00.000+02:00",
     now: "2026-07-28T15:30:00.000+02:00"
   }, extra);
+
+  if (!("checkedAt" in values)) values.checkedAt = values.now;
+  return values;
 }
 
 test('nothing ordered leaves the widget with nothing to show', () => {
-  const state = deriveDeliveryState({ orderStatus: "", now: WINDOW_START });
+  const state = deriveDeliveryState({ orderStatus: "", now: WINDOW_START, checkedAt: WINDOW_START });
 
-  assert.strictEqual(state.state, "idle");
+  assert.strictEqual(state.state, "empty");
   assert.strictEqual(state.countdownTo, null);
   assert.strictEqual(state.progress, null);
 });
@@ -122,7 +127,7 @@ test('a delivery from this morning is gone by the evening', () => {
     now: "2026-07-28T20:00:00.000+02:00"
   }));
 
-  assert.strictEqual(state.state, "idle");
+  assert.strictEqual(state.state, "empty");
 });
 
 test('a delivery moment that cannot be read leaves the widget empty rather than delivered', () => {
@@ -132,7 +137,7 @@ test('a delivery moment that cannot be read leaves the widget empty rather than 
     now: "2026-07-28T20:00:00.000+02:00"
   }));
 
-  assert.strictEqual(state.state, "idle");
+  assert.strictEqual(state.state, "empty");
 });
 
 test('an unreadable window is treated as no window at all', () => {
@@ -191,4 +196,139 @@ test('an unreadable cut off is left out rather than shown as a moment in 1970', 
   }));
 
   assert.strictEqual(state.cutOffAt, null);
+});
+
+test('a state Picnic has not confirmed in over a day is not shown as current', () => {
+  const state = deriveDeliveryState(stored({
+    etaStart: "2026-04-05T09:04:00.000+02:00",
+    etaEnd: "2026-04-05T09:24:00.000+02:00",
+    checkedAt: "2026-04-05T08:00:00.000+02:00",
+    now: "2026-09-17T11:42:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "stale");
+  assert.strictEqual(state.checkedAt, "2026-04-05T08:00:00.000+02:00");
+  assert.strictEqual(state.etaStart, null);
+  assert.strictEqual(state.countdownTo, null);
+});
+
+test('a state Picnic never confirmed is not shown as current either', () => {
+  const state = deriveDeliveryState(stored({ checkedAt: null }));
+
+  assert.strictEqual(state.state, "stale");
+  assert.strictEqual(state.checkedAt, null);
+});
+
+test('a poll missed here and there leaves the state as it is', () => {
+  const state = deriveDeliveryState(stored({ checkedAt: "2026-07-28T03:30:00.000+02:00" }));
+
+  assert.strictEqual(state.state, "announced");
+});
+
+test('a sign in that is needed is said before the state is called out of date', () => {
+  const state = deriveDeliveryState(stored({ signInNeeded: true, checkedAt: null }));
+
+  assert.strictEqual(state.state, "signed_out");
+});
+
+test('an order the app only sees gone months after its window is not shown as just delivered', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    etaStart: "2026-04-05T09:04:00.000+02:00",
+    etaEnd: "2026-04-05T09:24:00.000+02:00",
+    deliveredAt: "2026-09-17T11:42:00.000+02:00",
+    now: "2026-09-17T11:50:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "empty");
+});
+
+test('groceries delivered a little after their window still show as delivered', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    deliveredAt: "2026-07-28T17:40:00.000+02:00",
+    now: "2026-07-28T17:45:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "delivered");
+});
+
+test('a delivery stays on the widget for four hours and then makes way', () => {
+  const delivered = { orderStatus: "groceries_delivered", deliveredAt: "2026-07-28T16:18:00.000+02:00" };
+
+  assert.strictEqual(deriveDeliveryState(stored(Object.assign({ now: "2026-07-28T20:17:00.000+02:00" }, delivered))).state, "delivered");
+  assert.strictEqual(deriveDeliveryState(stored(Object.assign({ now: "2026-07-28T20:19:00.000+02:00" }, delivered))).state, "empty");
+});
+
+test('a delivered order carries what Picnic said about it, deposit included', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    deliveredAt: "2026-07-28T16:18:00.000+02:00",
+    delivery: { totalPrice: 22.03, depositReturned: 4.8, returned: [{ name: "Flessen", quantity: 6, amount: 0.9 }] },
+    now: "2026-07-28T16:30:00.000+02:00"
+  }));
+
+  assert.deepStrictEqual(state.delivery, { totalPrice: 22.03, depositReturned: 4.8, returned: [{ name: "Flessen", quantity: 6, amount: 0.9 }] });
+});
+
+const CART = {
+  totalPrice: 22.03,
+  productCount: 9,
+  minimumOrderValue: 35,
+  slot: { chosen: true, windowStart: "2026-07-30T18:15:00.000+02:00", windowEnd: "2026-07-30T19:15:00.000+02:00", cutOffAt: "2026-07-29T23:00:00.000+02:00" }
+};
+
+test('with nothing ordered, a cart with something in it is what the widget shows', () => {
+  const state = deriveDeliveryState(stored({ orderStatus: "", cart: CART }));
+
+  assert.strictEqual(state.state, "cart");
+  assert.strictEqual(state.cart.totalPrice, 22.03);
+  assert.strictEqual(state.cart.minimumShort, 12.97);
+  assert.strictEqual(state.cart.slotChosen, true);
+  assert.deepStrictEqual(state.cart.slot, {
+    windowStart: CART.slot.windowStart,
+    windowEnd: CART.slot.windowEnd,
+    cutOffAt: CART.slot.cutOffAt
+  });
+});
+
+test('a slot Picnic suggested by itself is not named', () => {
+  const state = deriveDeliveryState(stored({ orderStatus: "", cart: Object.assign({}, CART, { slot: Object.assign({}, CART.slot, { chosen: false }) }) }));
+
+  assert.strictEqual(state.cart.slotChosen, false);
+  assert.strictEqual(state.cart.slot, null);
+});
+
+test('a chosen slot whose ordering deadline passed keeps its window but not its deadline', () => {
+  const state = deriveDeliveryState(stored({ orderStatus: "", cart: CART, now: "2026-07-29T23:30:00.000+02:00" }));
+
+  assert.strictEqual(state.cart.slot.cutOffAt, null);
+  assert.strictEqual(state.cart.slot.windowStart, CART.slot.windowStart);
+});
+
+test('an empty cart is the empty state, and says the cart was looked at', () => {
+  const state = deriveDeliveryState(stored({ orderStatus: "", cart: { totalPrice: 0, productCount: 0 } }));
+
+  assert.strictEqual(state.state, "empty");
+  assert.strictEqual(state.cartKnown, true);
+  assert.strictEqual(deriveDeliveryState(stored({ orderStatus: "" })).cartKnown, false);
+});
+
+test('a delivery just made is shown before the next cart', () => {
+  const state = deriveDeliveryState(stored({
+    orderStatus: "groceries_delivered",
+    deliveredAt: "2026-07-28T16:18:00.000+02:00",
+    cart: CART,
+    now: "2026-07-28T16:30:00.000+02:00"
+  }));
+
+  assert.strictEqual(state.state, "delivered");
+});
+
+test('the cart only rides along with an order while that order can still be added to', () => {
+  const open = deriveDeliveryState(stored({ orderStatus: "groceries_ordered", cart: CART, cutOffAt: "2026-07-28T15:45:00.000+02:00" }));
+  const closed = deriveDeliveryState(stored({ orderStatus: "groceries_ordered", cart: CART, cutOffAt: "2026-07-28T15:00:00.000+02:00" }));
+
+  assert.strictEqual(open.cart.totalPrice, 22.03);
+  assert.strictEqual(closed.cart, null);
 });

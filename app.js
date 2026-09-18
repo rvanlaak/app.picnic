@@ -7,6 +7,7 @@ const utils = require('./lib/utils.js');
 const { deriveOrderEvent, windowTriggersStillApply, deriveOrderFacts } = require('./lib/orderevent.js');
 const { deriveDeliveryState } = require('./lib/deliverystate.js');
 const { parseCart } = require('./lib/cartresponse.js');
+const { parseDelivery } = require('./lib/deliveryresponse.js');
 const cutoff = require('./lib/cutoff.js');
 const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
 const twofactor = require('./lib/twofactor.js');
@@ -27,9 +28,10 @@ var DELIVERY_POLL_INTERVAL = 1000 * 60 * 1 // 1 minute
 // watching one has Picnic asked on their behalf, not about a timer.
 const CART_MAX_AGE = 1000 * 60 * 5 // 5 minutes
 
-// Where tapping the widget goes. Picnic has no documented deep link, so it is
-// the front door rather than the cart.
-const PICNIC_URL = "https://picnic.app"
+// How long what Picnic said about a delivery that has been made may be out of
+// date. Only asked for while the widget shows that delivery, which is a few
+// hours, and the deposit coming back is the one thing in it that changes.
+const DELIVERY_MAX_AGE = 1000 * 60 * 10 // 10 minutes
 
 const DEBUG = false
 
@@ -405,6 +407,7 @@ class Picnic extends Homey.App {
 	// minutes off would otherwise count down to the wrong minute.
 	async getDeliveryWidgetState() {
 		const now = new Date();
+		const deliveryId = this.homey.settings.get("delivery_id");
 
 		const state = deriveDeliveryState({
 			"orderStatus": this.homey.settings.get("order_status"),
@@ -418,32 +421,96 @@ class Picnic extends Homey.App {
 			"cutOffAt": this.homey.settings.get("delivery_cut_off")
 				|| this.cutOffFor(this.homey.settings.get("delivery_eta_start")),
 			"signInNeeded": this._picnicOutOfReach(),
+			"checkedAt": this.homey.settings.get("order_checked_at"),
+			"cart": this._cart || null,
+			// only what was asked about the delivery the app is following: the
+			// details of the one before it would be about other groceries
+			"delivery": this._delivery && this._delivery["deliveryId"] == deliveryId ? this._delivery : null,
 			"now": now.toISOString()
 		});
 
-		// The cart is worth a look when there is nothing planned, and while an
-		// order is still open, because what is in it then are the things that
-		// have yet to be added to that order. Once it closes there is nothing
-		// to be done about them and Picnic is left alone about it.
-		if (state["state"] == "idle" || state["cutOffAt"]) this._refreshCartWhenStale();
+		// The cart is worth a look when nothing is planned, and while an order
+		// is still open, because what is in it then are the things that have yet
+		// to be added to that order. Once it closes Picnic is left alone about it.
+		if (state["state"] == "empty" || state["state"] == "cart" || state["cutOffAt"]) this._refreshCartWhenStale();
 
-		return Object.assign(state, {
+		// A delivery that has been made is asked about while it is on the
+		// dashboard: when it really arrived, and what came back in deposit.
+		if (state["state"] == "delivered" && deliveryId) this._refreshDeliveryWhenStale(deliveryId);
+
+		const cart = state["cart"];
+		const slot = cart && cart["slot"];
+		const delivery = state["delivery"];
+		const orderPrice = this.homey.settings.get("order_price");
+
+		// Formatted here rather than in the widget: the times belong to the
+		// timezone Homey runs in, not to the one the browser showing the
+		// dashboard happens to be in.
+		return {
+			"state": state["state"],
 			"now": now.toISOString(),
-			// formatted here rather than in the widget: the times belong to the
-			// timezone Homey runs in, not to the one the browser showing the
-			// dashboard happens to be in
-			"windowStart": this.formatEtaTime(state["etaStart"]),
-			"windowEnd": this.formatEtaTime(state["etaEnd"]),
-			"deliveredTime": this.formatEtaTime(state["deliveredAt"]),
-			"cutOffTime": this.formatEtaTime(state["cutOffAt"]),
-			// a delivered order has no window left to name a day after, so the
-			// moment it arrived names it instead
+			"countdownTo": state["countdownTo"],
+			"progress": state["progress"],
 			"day": this.formatEtaDay(state["etaStart"] || state["deliveredAt"], now),
-			"price": this.homey.settings.get("order_price"),
-			"cart": this._cart || null,
-			"popupUrl": PICNIC_URL,
+			"window": this._formatWindow(state["etaStart"], state["etaEnd"]),
+			"deliveredTime": this.formatEtaTime(state["deliveredAt"]),
+			"cutOffAt": state["cutOffAt"],
+			"cutOffLabel": this._formatMoment(state["cutOffAt"], now),
+			// the price of an order the widget is not showing would be read as
+			// the price of whatever it is showing instead
+			"price": state["state"] == "delivered" && delivery && delivery["totalPrice"] !== null
+				? delivery["totalPrice"]
+				: (["ordered", "announced", "arriving", "overdue", "delivered"].indexOf(state["state"]) != -1 && typeof orderPrice == 'number' ? orderPrice : null),
+			"deposit": delivery ? {
+				"returned": delivery["depositReturned"],
+				"containers": delivery["returned"].map(container => ({ "name": container["name"], "quantity": container["quantity"] }))
+			} : null,
+			"cart": cart ? {
+				"totalPrice": cart["totalPrice"],
+				"productCount": cart["productCount"],
+				"minimumShort": cart["minimumShort"],
+				"slotChosen": cart["slotChosen"],
+				"slot": slot ? {
+					"day": this.formatEtaDay(slot["windowStart"], now),
+					"window": this._formatWindow(slot["windowStart"], slot["windowEnd"]),
+					"cutOffAt": slot["cutOffAt"],
+					"cutOffLabel": this._formatMoment(slot["cutOffAt"], now)
+				} : null
+			} : null,
+			"cartKnown": state["cartKnown"],
+			"checkedLabel": this._formatMoment(state["checkedAt"], now),
+			// amounts are written the way Homey's language writes them, not the
+			// way the tablet showing the dashboard happens to be set up
+			"locale": this._language(),
 			"labels": this._deliveryWidgetLabels()
-		});
+		};
+	}
+
+	_language() {
+		try {
+			return this.homey.i18n.getLanguage() || undefined;
+		} catch (exception) {
+			return undefined;
+		}
+	}
+
+	// "16:11–16:31", or as much of it as is known
+	_formatWindow(start, end) {
+		const from = this.formatEtaTime(start);
+		const until = this.formatEtaTime(end);
+
+		if (from == "" || until == "") return from;
+		return from + "–" + until;
+	}
+
+	// "today 23:00", "Fri 19 Sep 13:00": a moment someone has to act before,
+	// which is always worth its day as well as its time
+	_formatMoment(iso, now) {
+		const day = this.formatEtaDay(iso, now);
+		const time = this.formatEtaTime(iso);
+
+		if (day == "" || time == "") return time;
+		return day + " " + time;
 	}
 
 	// Whether the app is in a position to know anything about an order at all.
@@ -486,10 +553,12 @@ class Picnic extends Homey.App {
 	_deliveryWidgetLabels() {
 		const labels = {};
 
-		["signed-out", "idle", "ordered", "announced", "arriving", "overdue", "delivered",
-			"now", "day", "days", "hour", "hours", "minute", "minutes",
-			"cart", "item", "items", "minimum", "cut-off-at", "cut-off-in",
-			"to-order-at", "to-order-in"].forEach(key => {
+		["signed-out", "signed-out-detail", "stale", "stale-since", "empty", "empty-cart",
+			"ordered", "announced", "arriving", "overdue", "delivered", "delivered-at",
+			"now", "in", "at", "day", "days", "hour", "hours", "minute", "minutes",
+			"cart", "item", "items", "minimum", "no-slot", "order-before", "order-in",
+			"cut-off-at", "cut-off-in", "to-order-at", "to-order-in",
+			"deposit-returned", "deposit-pending"].forEach(key => {
 				labels[key] = this.homey.__("widget.delivery." + key);
 			});
 
@@ -500,7 +569,7 @@ class Picnic extends Homey.App {
 	// more. Kept out of the event machinery on purpose: it is a fact about the
 	// slot rather than something that happened, and an order that was already
 	// open when this app version arrived has to pick it up too.
-	_storeCutOff(facts) {
+	_storeOrderFacts(facts) {
 		const cutOff = facts["cutOffTime"];
 
 		if (cutOff) {
@@ -508,6 +577,10 @@ class Picnic extends Homey.App {
 		} else {
 			this.homey.settings.unset("delivery_cut_off");
 		}
+
+		// Kept when the delivery drops out of the summary, which is exactly
+		// when it is needed: that is how a delivery ends.
+		if (facts["deliveryId"]) this.homey.settings.set("delivery_id", facts["deliveryId"]);
 	}
 
 	// The cart, as far as the widget is concerned. Kept in memory rather than
@@ -548,6 +621,45 @@ class Picnic extends Homey.App {
 				this._logProblem("Retrieving the cart", describeError(error));
 			})
 			.then(() => { this._cartRefreshing = false; }, () => { this._cartRefreshing = false; });
+	}
+
+	// The delivery that was just made, as far as the widget is concerned. In
+	// memory for the same reason as the cart. The moment Picnic says it arrived
+	// replaces the moment the poll noticed, which can be an hour later.
+	_refreshDeliveryWhenStale(deliveryId) {
+		if (this._deliveryRefreshing === true) return;
+		if (this._delivery && this._delivery["deliveryId"] == deliveryId && Date.now() - this._delivery["refreshedAt"] < DELIVERY_MAX_AGE) return;
+		if (!this.homey.settings.get("x-picnic-auth") || this._picnicOutOfReach()) return;
+
+		this._deliveryRefreshing = true;
+
+		this.utils.getDelivery(deliveryId)
+			.then(body => {
+				const delivery = parseDelivery(body);
+
+				if (delivery === null) {
+					this._logProblem("Retrieving the delivery", "the delivery Picnic sent back could not be read");
+					return;
+				}
+
+				this._logProblem("Retrieving the delivery", null);
+				this._delivery = Object.assign(delivery, { "deliveryId": deliveryId, "refreshedAt": Date.now() });
+
+				if (delivery["deliveredAt"] && delivery["deliveredAt"] != this.homey.settings.get("delivery_time")) {
+					this.info("Picnic says the delivery arrived at " + delivery["deliveredAt"] + ", the poll noticed at " + this.homey.settings.get("delivery_time"));
+					this.homey.settings.set("delivery_time", delivery["deliveredAt"]);
+				}
+
+				return this._publishDeliveryState();
+			})
+			.catch(async error => {
+				if (hasCode(error, SECOND_FACTOR_REQUIRED)) return await this._signInRequired();
+
+				// the widget shows the delivery without the details, which is
+				// what it did before it knew to ask for them
+				this._logProblem("Retrieving the delivery", describeError(error));
+			})
+			.then(() => { this._deliveryRefreshing = false; }, () => { this._deliveryRefreshing = false; });
 	}
 
 	// The dashboard is not told to ask again, so a state change has to reach an
@@ -1396,6 +1508,9 @@ class Picnic extends Homey.App {
 					summary = JSON.parse(content);
 					// only now, an answer that cannot be read is not an answer
 					this._logProblem("Retrieving the order", null);
+					// what the widget measures the stored state against: what
+					// Picnic has not confirmed in a long time is not shown as news
+					this.homey.settings.set("order_checked_at", new Date().toISOString());
 				} catch (exception) {
 					// the answer is the only thing that explains why it could not be read
 					return reject(toError(exception, "The order info from Picnic could not be read, it answered " + describeBody(content)));
@@ -1404,7 +1519,7 @@ class Picnic extends Homey.App {
 				// read on every poll rather than off an event: an order placed
 				// before this app version knew about cut off times would
 				// otherwise never get one
-				this._storeCutOff(deriveOrderFacts(summary));
+				this._storeOrderFacts(deriveOrderFacts(summary));
 
 				const previousStatus = this.homey.settings.get("order_status")
 				const orderEvent = deriveOrderEvent(summary, previousStatus, {

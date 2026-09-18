@@ -13,8 +13,15 @@ each release is what Homey shows in the app store, and lives in `.homeychangelog
 - With nothing ordered at all, the widget shows what is in the cart and how many products that is, so it has something to say on the days between deliveries. If the cart is below the minimum order value it says how much is missing
 - Tapping the widget opens Picnic, with a short buzz to say the tap arrived. Both the cart and the tap can be turned off in the widget's settings
 - The cart is only fetched while a dashboard is actually showing the widget, at most once every five minutes, and only while nothing is ordered
+- The widget was redesigned around one layout that every state fills in: what this is about at the top, the one thing worth reading large at the bottom, the detail under it and what can be done about it below that. It has an icon and a colour per state, follows the dashboard into dark mode, and lays itself out for a half width tile on a phone as well as for a full width one
+- The widget no longer opens anything when tapped, and the setting for it is gone: there is nothing on the other side of that tap
+- A delivery drops off the widget four hours after it arrived, rather than six, and what it shows in the meantime is the moment Picnic says it arrived rather than the moment the app noticed
+- A delivered order shows what came back in deposit once Picnic has counted it, and what went back: "6× Flessen, 1× Kratten"
+- With nothing ordered, the widget says which delivery moment the cart is set to, or that none has been picked yet, which is worth knowing because an unpicked moment is not held for you. With one picked it says when the order has to be placed by, counted down over the last hour
+- Amounts are written the way the language Homey is set to writes them, rather than the way the tablet showing the dashboard happens to be set up
+- The widget never passes off what the app was last told as what is going on. When Picnic has not answered a poll in over a day it says there is no recent word from Picnic and when it last heard, instead of retelling an order from months ago as a delivery that is running late. An order the app only sees gone long after its window is not shown as just delivered either
 - Picnic refusing to hand out an order until a 2FA code is verified (HTTP 403, `TWO_FACTOR_AUTHENTICATION_REQUIRED`) is now recognised as a sign-in being needed. The app used to log it as a failed poll every hour and carry on with what it knew from before, and the settings page called the login "NOT OK". Now Homey notifies you, the settings page asks for a sign-in and the widget says so
-- The app needs Homey firmware v12.1.0 or newer from this release on. That is what an app containing a widget is required to ask for, and it is the version Homey Dashboards themselves need
+- The app needs Homey firmware v12.3.0 or newer from this release on. That is what the SDK documentation requires of an app containing a widget
 
 ## 3.7.0
 
