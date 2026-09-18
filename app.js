@@ -570,7 +570,7 @@ class Picnic extends Homey.App {
 
 		["signed-out", "signed-out-detail", "stale", "stale-since", "empty", "empty-cart",
 			"ordered", "announced", "arriving", "overdue", "delivered", "delivered-at",
-			"now", "in", "at", "day", "days", "hour", "hours", "minute", "minutes",
+			"now", "in", "at", "today", "day", "days", "hour", "hours", "minute", "minutes",
 			"cart", "item", "items", "minimum", "no-slot", "slot-closed", "order-before", "order-within",
 			"cut-off-at", "cut-off-in", "to-order-at", "to-order-in",
 			"deposit-returned", "deposit-pending"].forEach(key => {

@@ -467,3 +467,19 @@ test('no countdown on the widget is ever finer than a minute', () => {
 test('the widget no longer does anything when tapped', () => {
   assert.strictEqual(/popup|hapticFeedback|addEventListener\('click'/.test(script), false);
 });
+
+test('every word the widget asks for is one the app hands over', () => {
+  // the labels arrive from the app rather than from the locale file, so a key
+  // the app leaves out is an empty string on the dashboard, not an error
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const handed = app.match(/_deliveryWidgetLabels\(\) \{[\s\S]*?\]\.forEach/)[0];
+  const asked = new Set();
+
+  for (const call of script.matchAll(/\b(?:label|text)\('([a-z-]+)'/g)) asked.add(call[1]);
+  for (const entry of script.matchAll(/status: '([a-z-]+)'/g)) asked.add(entry[1]);
+
+  asked.forEach(key => {
+    assert.ok(handed.includes('"' + key + '"'), 'the widget asks for "' + key + '" but the app does not hand it over');
+    assert.ok(LABELS[key], 'no English text for "' + key + '"');
+  });
+});
