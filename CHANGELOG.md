@@ -30,6 +30,7 @@ each release is what Homey shows in the app store, and lives in `.homeychangelog
 - The widget never passes off what the app was last told as what is going on. When Picnic has not answered a poll in over a day it says there is no recent word from Picnic and when it last heard, instead of retelling an order from months ago as a delivery that is running late. An order the app only sees gone long after its window is not shown as just delivered either
 - Picnic refusing to hand out an order until a 2FA code is verified (HTTP 403, `TWO_FACTOR_AUTHENTICATION_REQUIRED`) is now recognised as a sign-in being needed. The app used to log it as a failed poll every hour and carry on with what it knew from before, and the settings page called the login "NOT OK". Now Homey notifies you, the settings page asks for a sign-in and the widget says so
 - The app needs Homey firmware v12.3.0 or newer from this release on. That is what the SDK documentation requires of an app containing a widget
+- The widget previews, in the App Store and in the widget picker, now show the widget as it sits on a dashboard: its own frame, white in light mode and dark grey in dark mode, with the shadow Homey's preview template gives it, and inside it the Picnic-red badge with the van, the green status badge and the bar that fills. They were bare shapes on nothing, which read as loose lines on the picker's grey
 
 ## 3.7.0
 
