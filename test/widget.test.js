@@ -16,7 +16,17 @@ const script = html.match(/<script type="text\/javascript">([\s\S]*?)<\/script>/
 // the English labels the app hands over, straight from the locale file
 const LABELS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'locales', 'en.json'), 'utf8')).widget.delivery;
 
-const NODES = ['tile', 'badge', 'status', 'meta', 'caption', 'headline', 'value', 'unit', 'detail', 'when', 'what', 'track', 'fill', 'note'];
+const NODES = ['tile', 'badge', 'status', 'meta', 'caption', 'headline', 'value', 'unit', 'detail', 'when', 'what', 'track', 'fill', 'note', 'note-first', 'note-second', 'note-short'];
+
+// The note as a full width tile shows it, its two lines joined by " / ", and as
+// a half width one does.
+function noteOf(nodes) {
+  return [nodes['note-first'].textContent, nodes['note-second'].hidden ? '' : nodes['note-second'].textContent].filter(Boolean).join(' / ');
+}
+
+function shortNoteOf(nodes) {
+  return nodes['note-short'].textContent;
+}
 
 function harness(settings) {
   const nodes = {};
@@ -206,7 +216,7 @@ test('deposit that came back is shown with the delivery', () => {
   }, WINDOW)));
 
   assert.strictEqual(detail(), 'today · 6× Bottles, 1× Crates');
-  assert.strictEqual(nodes.note.textContent, '+€4.80 deposit back');
+  assert.strictEqual(noteOf(nodes), '+€4.80 deposit back');
   assert.strictEqual(nodes.note.dataset.tone, 'good');
 });
 
@@ -299,7 +309,7 @@ test('an order that can still be added to says until when', () => {
   }));
 
   assert.strictEqual(nodes.note.hidden, false);
-  assert.strictEqual(nodes.note.textContent, 'Add until today 23:00');
+  assert.strictEqual(noteOf(nodes), 'Can be added to until today 23:00');
   assert.strictEqual(nodes.note.dataset.tone, '');
 });
 
@@ -314,7 +324,7 @@ test('the last hour before an order closes is counted down and called out', () =
     now: '2026-07-28T13:35:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.note.textContent, '25 min left to add');
+  assert.strictEqual(noteOf(nodes), '25 minutes left to add to it');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
@@ -330,7 +340,7 @@ test('a cut off that has passed has nothing left to say', () => {
   }));
 
   assert.strictEqual(nodes.note.hidden, true);
-  assert.strictEqual(nodes.note.textContent, '');
+  assert.strictEqual(noteOf(nodes), '');
 });
 
 test('a cart while an order is open is what still has to go onto that order', () => {
@@ -347,7 +357,7 @@ test('a cart while an order is open is what still has to go onto that order', ()
 
   // the delivery is still the headline, the things not on it yet the note
   assert.strictEqual(headline(), 'Delivery in 21 hours');
-  assert.strictEqual(nodes.note.textContent, '€12.40 still to add, until today 23:00');
+  assert.strictEqual(noteOf(nodes), '3 more products in your cart / Can be added until today 23:00');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
@@ -363,7 +373,7 @@ test('the last hour to add to an open order counts down next to the amount', () 
     now: '2026-07-27T22:35:00.000+02:00'
   }));
 
-  assert.strictEqual(nodes.note.textContent, '€12.40 still to add, 25 min left');
+  assert.strictEqual(noteOf(nodes), '3 more products in your cart / 25 minutes left to add them');
 });
 
 test('a cart with a slot picked is not an order yet, and says until when it can become one', () => {
@@ -396,7 +406,7 @@ test('the order deadline and the missing amount are both said', () => {
   adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 32.86, productCount: 18, minimumOrderValue: 45 }), now: '2026-07-28T10:00:00.000+02:00' }));
 
   assert.strictEqual(headline(), 'Order before 23:00 Fri 19 Sep');
-  assert.strictEqual(nodes.note.textContent, '€12.14 short of the minimum');
+  assert.strictEqual(noteOf(nodes), '€12.14 short of the minimum');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
@@ -437,7 +447,7 @@ test('a cart below the minimum says how much is missing', () => {
   adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-28T10:00:00.000+02:00' }));
 
   assert.strictEqual(nodes.meta.textContent, '1 product');
-  assert.strictEqual(nodes.note.textContent, '€6.80 short of the minimum');
+  assert.strictEqual(noteOf(nodes), '€6.80 short of the minimum');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
@@ -500,7 +510,7 @@ test('a placed order with twenty minutes left to add to says so, whatever the de
 
   assert.strictEqual(nodes.status.textContent, 'Ordered');
   assert.strictEqual(headline(), 'Delivery in 20 hours');
-  assert.strictEqual(nodes.note.textContent, '20 min left to add');
+  assert.strictEqual(noteOf(nodes), '20 minutes left to add to it');
   assert.strictEqual(nodes.note.dataset.tone, 'warn');
 });
 
@@ -525,4 +535,83 @@ test('the caption says what the number is, and a sentence goes without one', () 
   adopt(payload(Object.assign({ now: '2026-07-28T16:16:00.000+02:00' }, ANNOUNCED)));
   assert.strictEqual(nodes.caption.hidden, true);
   assert.strictEqual(nodes.value.textContent, 'Any minute now');
+});
+
+test('products in the cart while an order is open are said first, with the time left to add them', () => {
+  const { nodes, adopt, headline, detail } = harness();
+
+  // one product of 1,59 in the cart, eleven minutes left, 29 products ordered
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-09-19T08:30:00.000+02:00',
+    etaEnd: '2026-09-19T09:30:00.000+02:00',
+    cutOffAt: '2026-09-18T13:00:00.000+02:00',
+    cart: { totalPrice: 1.59, productCount: 1 },
+    now: '2026-09-18T12:49:00.000+02:00'
+  }, { orderCount: 29, price: 53.43 }));
+
+  assert.strictEqual(nodes.meta.textContent, '29 products · €53.43');
+  assert.strictEqual(headline(), 'Delivery in 20 hours');
+  assert.strictEqual(detail(), 'today 16:11–16:31 · €1.59 in cart');
+  assert.strictEqual(noteOf(nodes), '1 more product in your cart / 11 minutes left to add them');
+  assert.strictEqual(shortNoteOf(nodes), '1 product · 11\u00a0min\u00a0left');
+  assert.strictEqual(nodes.note.dataset.tone, 'warn');
+});
+
+test('the last minute to add is not pluralised', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-09-19T08:30:00.000+02:00',
+    etaEnd: '2026-09-19T09:30:00.000+02:00',
+    cutOffAt: '2026-09-18T13:00:00.000+02:00',
+    cart: { totalPrice: 3.18, productCount: 2 },
+    now: '2026-09-18T12:59:30.000+02:00'
+  }));
+
+  assert.strictEqual(noteOf(nodes), '2 more products in your cart / 1 minute left to add them');
+});
+
+test('hours before the deadline, the cart still to add says until when, not yet in red', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-09-19T08:30:00.000+02:00',
+    etaEnd: '2026-09-19T09:30:00.000+02:00',
+    cutOffAt: '2026-09-18T13:00:00.000+02:00',
+    now: '2026-09-18T09:00:00.000+02:00'
+  }));
+
+  assert.strictEqual(noteOf(nodes), 'Can be added to until today 23:00');
+  assert.strictEqual(shortNoteOf(nodes), 'Can be added to until today 23:00');
+  assert.strictEqual(nodes.note.dataset.tone, '');
+});
+
+// the short forms keep a number and its unit together, so a half width tile
+// never ends a line on "11" and starts the next one with "min"
+test('an empty cart in the last hour gives the short form its own words', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(payload({
+    orderStatus: 'groceries_ordered',
+    etaStart: '2026-09-19T08:30:00.000+02:00',
+    etaEnd: '2026-09-19T09:30:00.000+02:00',
+    cutOffAt: '2026-09-18T13:00:00.000+02:00',
+    now: '2026-09-18T12:43:00.000+02:00'
+  }));
+
+  assert.strictEqual(noteOf(nodes), '17 minutes left to add to it');
+  assert.strictEqual(shortNoteOf(nodes), '17\u00a0min left to add');
+});
+
+test('a one line note is the same on every tile', () => {
+  const { nodes, adopt } = harness();
+
+  adopt(payload({ orderStatus: '', cart: cart({ totalPrice: 28.2, productCount: 1, minimumOrderValue: 35 }), now: '2026-07-28T10:00:00.000+02:00' }));
+
+  assert.strictEqual(noteOf(nodes), '€6.80 short of the minimum');
+  assert.strictEqual(shortNoteOf(nodes), '€6.80 short of the minimum');
+  assert.strictEqual(nodes['note-second'].hidden, true);
 });

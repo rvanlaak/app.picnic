@@ -64,7 +64,8 @@ nothing is running.
 
 | Field | Meaning |
 | --- | --- |
-| `orders[].checkout_total_price` | what was paid for each order |
+| `orders[].checkout_total_price` | what was paid for each order. Adding to a placed order adds an order to the delivery, so the delivery's total is the sum |
+| `orders[].items[].items[].decorators[]` | each article's `{ type: "QUANTITY", quantity }`: summed, the number of products in the order. Picnic states no total for a placed order the way `total_count` does for the cart |
 | `orders[].total_deposit`, `orders[].deposit_breakdown[]` | deposit paid, `{ type: BAG\|DEFAULT, value, count }` |
 | `returned_containers[]` | `{ type, localized_name, quantity, price }`, filled in once the hub has counted what went back. **Unconfirmed**: whether `price` is per unit (as the app assumes) or per line |
 

@@ -448,7 +448,12 @@ class Picnic extends Homey.App {
 
 		// A delivery that has been made is asked about while it is on the
 		// dashboard: when it really arrived, and what came back in deposit.
-		if (state["state"] == "delivered" && deliveryId) this._refreshDeliveryWhenStale(deliveryId);
+		// The order in full is asked for while one is placed or has just been
+		// delivered: how many products it holds, what it costs once something
+		// has been added to it, and once delivered, when it came and what came
+		// back in deposit. The summary the poll reads carries none of that.
+		const orderInHand = ["ordered", "announced", "arriving", "overdue", "delivered"].indexOf(state["state"]) != -1;
+		if (orderInHand && deliveryId) this._refreshDeliveryWhenStale(deliveryId);
 
 		// Between deliveries the poll runs every six hours, which is how an
 		// order placed in the Picnic app went unnoticed until long after its
@@ -459,6 +464,7 @@ class Picnic extends Homey.App {
 		const cart = state["cart"];
 		const slot = cart && cart["slot"];
 		const delivery = state["delivery"];
+		const details = this._delivery && this._delivery["deliveryId"] == deliveryId ? this._delivery : null;
 		const orderPrice = this.homey.settings.get("order_price");
 
 		// Formatted here rather than in the widget: the times belong to the
@@ -476,9 +482,12 @@ class Picnic extends Homey.App {
 			"cutOffLabel": this._formatMoment(state["cutOffAt"], now),
 			// the price of an order the widget is not showing would be read as
 			// the price of whatever it is showing instead
-			"price": state["state"] == "delivered" && delivery && delivery["totalPrice"] !== null
-				? delivery["totalPrice"]
-				: (["ordered", "announced", "arriving", "overdue", "delivered"].indexOf(state["state"]) != -1 && typeof orderPrice == 'number' ? orderPrice : null),
+			// what the order in full says it costs when that is known: adding to
+			// an order places a second one in the same delivery, which the price
+			// stored when the first was placed knows nothing about
+			"price": !orderInHand ? null
+				: (details && details["totalPrice"] !== null ? details["totalPrice"] : (typeof orderPrice == 'number' ? orderPrice : null)),
+			"orderCount": orderInHand && details ? details["productCount"] : null,
 			"deposit": delivery ? {
 				"returned": delivery["depositReturned"],
 				"containers": delivery["returned"].map(container => ({ "name": container["name"], "quantity": container["quantity"] }))
@@ -575,10 +584,12 @@ class Picnic extends Homey.App {
 		const labels = {};
 
 		["signed-out", "signed-out-detail", "stale", "stale-since", "empty", "empty-cart",
-			"ordered", "announced", "arriving", "overdue", "delivered", "delivered-at",
+			"ordered", "announced", "arriving", "overdue", "delivered",
 			"now", "delivery-in", "delivered-at", "today", "day", "days", "hour", "hours", "minute", "minutes",
 			"cart", "item", "items", "minimum", "no-slot", "slot-closed", "order-before", "order-within",
-			"cut-off-at", "cut-off-in", "to-order-at", "to-order-in",
+			"cut-off-at", "cut-off-in", "cut-off-in-one", "cut-off-in-short",
+			"to-order-item", "to-order-items", "to-order-at", "to-order-in", "to-order-in-one",
+			"to-order-short-at", "to-order-short-in", "cart-amount",
 			"deposit-returned", "deposit-pending"].forEach(key => {
 				labels[key] = this.homey.__("widget.delivery." + key);
 			});

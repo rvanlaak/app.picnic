@@ -61,3 +61,25 @@ test('an answer that is not a delivery is nothing', () => {
   assert.strictEqual(parseDelivery("[]"), null);
   assert.strictEqual(parseDelivery(JSON.stringify({})).totalPrice, null);
 });
+
+test('the products in an order are counted by the quantity on each article, across every order', () => {
+  const article = (quantity) => ({ decorators: [{ type: "UNIT_QUANTITY" }, { type: "QUANTITY", quantity: quantity }] });
+  const parsed = parseDelivery(delivery({
+    orders: [
+      { checkout_total_price: 5184, items: [{ items: [article(3)] }, { items: [article(1)] }] },
+      // what was added after the order was placed arrives as an order of its own
+      { checkout_total_price: 159, items: [{ items: [article(1)] }] }
+    ]
+  }));
+
+  assert.strictEqual(parsed.productCount, 5);
+  assert.strictEqual(parsed.totalPrice, 53.43);
+});
+
+test('an article without a quantity on it counts once', () => {
+  assert.strictEqual(parseDelivery(delivery({ orders: [{ items: [{ items: [{}] }] }] })).productCount, 1);
+});
+
+test('a delivery without its lines has no count rather than a count of nothing', () => {
+  assert.strictEqual(parseDelivery(delivery()).productCount, null);
+});
