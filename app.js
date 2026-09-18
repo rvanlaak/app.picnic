@@ -13,6 +13,7 @@ const { PICNIC_AGENT, PICNIC_DID } = require('./lib/picnicheaders.js');
 const twofactor = require('./lib/twofactor.js');
 const { describeError, describeStack, describeBody, toError } = require('./lib/errors.js');
 const { refusal, hasCode, SECOND_FACTOR_REQUIRED } = require('./lib/refusal.js');
+const { forLog } = require('./lib/debuglog.js');
 const eta = require('./lib/eta.js');
 
 var http = require("https");
@@ -34,6 +35,11 @@ const CART_MAX_AGE = 1000 * 60 * 5 // 5 minutes
 const DELIVERY_MAX_AGE = 1000 * 60 * 10 // 10 minutes
 
 const DEBUG = false
+
+// Homey sets this for an app started with `homey app run` and for no other, so
+// what Picnic answers is written to the log while someone is developing
+// against it, and never by an installed app.
+const LOG_RESPONSES = process.env.DEBUG === '1'
 
 var runningInterval;
 var failureHandlers = null;
@@ -365,6 +371,12 @@ class Picnic extends Homey.App {
 			+ ", delivery window " + or("delivery_eta_start", "unknown") + " until " + or("delivery_eta_end", "unknown"));
 	}
 
+	// What Picnic answered, private details blanked, for `make run` only.
+	_logResponse(subject, body) {
+		if (!LOG_RESPONSES) return;
+		this.info("Picnic answered " + subject + ": " + forLog(body));
+	}
+
 	debug(message) {
 		try {
 			if (DEBUG) {
@@ -601,6 +613,8 @@ class Picnic extends Homey.App {
 		// comes back is pushed to it the same way any other change is.
 		this.utils.getCart()
 			.then(body => {
+				this._logResponse("GET /api/15/cart", body);
+
 				const cart = parseCart(body);
 
 				if (cart === null) {
@@ -635,6 +649,8 @@ class Picnic extends Homey.App {
 
 		this.utils.getDelivery(deliveryId)
 			.then(body => {
+				this._logResponse("GET /api/15/deliveries/" + deliveryId, body);
+
 				const delivery = parseDelivery(body);
 
 				if (delivery === null) {
@@ -1502,6 +1518,8 @@ class Picnic extends Homey.App {
 					this.debug(content)
 				}
 				if (typeof content == 'undefined') return reject(new Error("Picnic answered the order request with nothing at all"));
+
+				this._logResponse("POST /api/15/deliveries/summary [\"CURRENT\"]", content);
 
 				var summary;
 				try {
