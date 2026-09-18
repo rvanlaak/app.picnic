@@ -47,8 +47,6 @@
             "overdue": "Running late",
             "delivered": "Delivered",
             "now": "Any minute now",
-            "in": "in",
-            "at": "at",
             "day": "day",
             "days": "days",
             "hour": "hour",
@@ -62,14 +60,16 @@
             "items": "__n__ products",
             "minimum": "__t__ short of the minimum",
             "no-slot": "No delivery slot picked",
-            "order-before": "before",
+            "order-before": "Order before",
             "cut-off-at": "Add until __t__",
             "cut-off-in": "__n__ min left to add",
             "to-order-at": "__a__ still to add, until __t__",
             "to-order-in": "__a__ still to add, __n__ min left",
             "deposit-returned": "+__t__ deposit back",
-            "order-within": "in",
-            "slot-closed": "Too late for this slot"
+            "order-within": "Order within",
+            "slot-closed": "Too late for this slot",
+            "delivery-in": "Delivery in",
+            "delivered-at": "Delivered at"
         }
     }
 }

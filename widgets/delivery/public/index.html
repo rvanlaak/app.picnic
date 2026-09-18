@@ -29,8 +29,9 @@
       flex-direction: column;
       font-variant-numeric: tabular-nums;
 
-      /* Picnic's own badge colours: its red, the green of its "Family" badge
-         and the yellow of its "Actie" one. Each comes as the fill of a badge,
+      /* Picnic's own badge colours: its red, the green of its "Family" badge,
+         the lighter green of its "Naar de winkel" button for an order that is
+         in hand, and the yellow of its "Actie" one. Each comes as the fill of a badge,
          the text on that fill, and an ink for text and icons on the widget
          itself, where the fill would not always be readable. */
       --brand: #e40613;
@@ -39,6 +40,9 @@
       --good: #295813;
       --good-on: #ffffff;
       --good-ink: #295813;
+      --calm: #4b7f24;
+      --calm-on: #ffffff;
+      --calm-ink: #4b7f24;
       --warn: #f6d94a;
       --warn-on: #1b1b1d;
       --warn-ink: #8a6a00;
@@ -54,12 +58,14 @@
     .homey-dark-mode .tile {
       --brand-ink: #ff4b52;
       --good-ink: #7cc45a;
+      --calm-ink: #8bcf5c;
       --warn-ink: #f6d94a;
     }
 
     .tile[data-tone="brand"] { --tone: var(--brand); --tone-on: var(--brand-on); --tone-ink: var(--brand-ink); }
     .tile[data-tone="warn"] { --tone: var(--warn); --tone-on: var(--warn-on); --tone-ink: var(--warn-ink); }
     .tile[data-tone="good"] { --tone: var(--good); --tone-on: var(--good-on); --tone-ink: var(--good-ink); }
+    .tile[data-tone="calm"] { --tone: var(--calm); --tone-on: var(--calm-on); --tone-ink: var(--calm-ink); }
 
     .head {
       display: flex;
@@ -155,12 +161,23 @@
       text-overflow: ellipsis;
     }
 
-    .pre,
     .unit {
       flex: none;
       font-size: var(--homey-font-size-default, 17px);
       font-weight: var(--homey-font-weight-medium, 500);
       color: var(--muted);
+    }
+
+    /* what the number under it is, on a line of its own so the words never
+       have to fit beside the number on a narrow tile */
+    .caption {
+      font-size: var(--homey-font-size-small, 14px);
+      line-height: 18px;
+      font-weight: var(--homey-font-weight-medium, 500);
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* a sentence is read rather than glanced at, and may take two lines */
@@ -271,6 +288,11 @@
         content: none;
       }
 
+      /* the second part is the lesser one, and keeps to a line */
+      .detail .what {
+        -webkit-line-clamp: 1;
+      }
+
       .note {
         white-space: normal;
         display: -webkit-box;
@@ -301,7 +323,8 @@
     </div>
 
     <div class="body">
-      <div class="headline" id="headline" aria-live="polite"><span class="pre" id="pre"></span><span class="value" id="value"></span><span class="unit" id="unit"></span></div>
+      <div class="caption" id="caption" hidden></div>
+      <div class="headline" id="headline" aria-live="polite"><span class="value" id="value"></span><span class="unit" id="unit"></span></div>
       <div class="detail" id="detail"><span class="when" id="when"></span><span class="what" id="what"></span></div>
 
       <div class="track" id="track" hidden>
@@ -330,9 +353,11 @@
     // What each state looks like: its colour, its icon and what it is called
     // at the top. The words themselves come from the app.
     var STATES = {
-      'ordered': { tone: 'brand', icon: 'scheduled', status: 'ordered' },
-      'announced': { tone: 'brand', icon: 'truck', status: 'announced' },
-      'arriving': { tone: 'brand', icon: 'truck', status: 'arriving' },
+      // an order in hand is good news rather than something to act on, so it
+      // is green; red is kept for the cart that still has to be ordered
+      'ordered': { tone: 'calm', icon: 'scheduled', status: 'ordered' },
+      'announced': { tone: 'calm', icon: 'truck', status: 'announced' },
+      'arriving': { tone: 'calm', icon: 'truck', status: 'arriving' },
       'overdue': { tone: 'warn', icon: 'clock', status: 'overdue' },
       'delivered': { tone: 'good', icon: 'check', status: 'delivered' },
       'cart': { tone: 'brand', icon: 'basket', status: 'cart' },
@@ -460,7 +485,7 @@
       var amount = minutes < 60 ? minutes : (hours < 24 ? hours : days);
       var unit = minutes < 60 ? 'minute' : (hours < 24 ? 'hour' : 'day');
 
-      return { pre: label('in'), value: String(amount), unit: label(amount == 1 ? unit : unit + 's'), kind: 'countdown' };
+      return { caption: label('delivery-in'), value: String(amount), unit: label(amount == 1 ? unit : unit + 's'), kind: 'countdown' };
     }
 
     // A deadline: named while it is hours away, counted down and called out
@@ -511,7 +536,8 @@
         status: look.status ? label(look.status) : '',
         meta: '',
         kind: 'message',
-        pre: '',
+        // what the number is, above it
+        caption: '',
         headline: '',
         unit: '',
         // the detail line: when, and what about it
@@ -528,14 +554,13 @@
           if (data['countdownTo']) {
             var left = remaining(data['countdownTo']);
             shown.kind = left.kind;
-            shown.pre = left.pre || '';
+            shown.caption = left.caption || '';
             shown.headline = left.value;
             shown.unit = left.unit || '';
           } else {
             shown.headline = label('ordered');
           }
-          shown.when = data['day'];
-          shown.what = data['window'];
+          shown.when = [data['day'], data['window']].filter(Boolean).join(' ');
           shown.progress = data['progress'];
           shown.note = orderNote(data);
           break;
@@ -544,8 +569,7 @@
         case 'overdue':
           shown.meta = price;
           shown.headline = label('now');
-          shown.when = data['day'];
-          shown.what = data['window'];
+          shown.when = [data['day'], data['window']].filter(Boolean).join(' ');
           shown.progress = data['progress'];
           break;
 
@@ -553,7 +577,7 @@
           var deposit = data['deposit'];
           shown.meta = price;
           shown.kind = 'countdown';
-          shown.pre = label('at');
+          shown.caption = label('delivered-at');
           shown.headline = data['deliveredTime'];
           shown.when = data['day'];
           shown.what = containers(deposit);
@@ -580,11 +604,11 @@
 
             if (minutes !== null && minutes <= URGENT_MINUTES) {
               shown.tone = 'warn';
-              shown.pre = label('order-within');
+              shown.caption = label('order-within');
               shown.headline = String(minutes);
               shown.unit = label(minutes == 1 ? 'minute' : 'minutes');
             } else {
-              shown.pre = label('order-before');
+              shown.caption = label('order-before');
               shown.headline = slot['cutOffTime'];
               // today goes without saying; any other day does not
               shown.unit = slot['cutOffDay'] && slot['cutOffDay'] != label('today') ? slot['cutOffDay'] : '';
@@ -633,8 +657,8 @@
       element('status').textContent = shown.status;
       element('meta').textContent = shown.meta;
 
-      element('pre').textContent = shown.pre;
-      element('pre').hidden = shown.pre == '';
+      element('caption').textContent = shown.caption;
+      element('caption').hidden = shown.caption == '';
       element('value').textContent = shown.headline;
       element('unit').textContent = shown.unit;
       element('unit').hidden = shown.unit == '';

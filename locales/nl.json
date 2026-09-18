@@ -47,8 +47,6 @@
             "overdue": "Vertraagd",
             "delivered": "Bezorgd",
             "now": "Elk moment",
-            "in": "over",
-            "at": "om",
             "day": "dag",
             "days": "dagen",
             "hour": "uur",
@@ -62,14 +60,16 @@
             "items": "__n__ producten",
             "minimum": "Nog __t__ tot het minimum",
             "no-slot": "Geen bezorgmoment gekozen",
-            "order-before": "vóór",
+            "order-before": "Bestel vóór",
             "cut-off-at": "Bijbestellen tot __t__",
             "cut-off-in": "Bijbestellen: nog __n__ min",
             "to-order-at": "__a__ nog bijbestellen, tot __t__",
             "to-order-in": "__a__ nog bijbestellen, __n__ min",
             "deposit-returned": "+__t__ statiegeld",
-            "order-within": "nog",
-            "slot-closed": "Te laat voor dit bezorgmoment"
+            "order-within": "Bestel binnen",
+            "slot-closed": "Te laat voor dit bezorgmoment",
+            "delivery-in": "Bezorging over",
+            "delivered-at": "Bezorgd om"
         }
     }
 }
