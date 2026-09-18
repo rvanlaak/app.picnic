@@ -63,7 +63,9 @@ passing, and the minute it arrives in is as precise as that reading gets.
 
 The widget needs Homey firmware v12.3.0 or newer, which is what the SDK
 documentation requires of an app containing a widget. What is still left to
-verify about it is written down in [VERIFICATION.md](VERIFICATION.md).
+verify about it is written down in [VERIFICATION.md](VERIFICATION.md), and
+what is known about the Picnic calls behind it in
+[docs/picnic-api.md](docs/picnic-api.md).
 
 ## Flow Actions
 - Adding a product to your basket based on the name of the product passed as an argument.
